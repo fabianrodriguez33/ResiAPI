@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:17
+    container_name: resiup-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-resiup}
+      POSTGRES_USER: ${DB_USER:-resiup}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
+      TZ: America/Lima
+    ports:
+      - "5432:5432"
+    volumes:
+      - resiup-pgdata:/var/lib/postgresql/data
+volumes:
+  resiup-pgdata:
