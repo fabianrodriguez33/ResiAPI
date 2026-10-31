@@ -11,6 +11,8 @@ public interface AsignacionHabitacionRepository extends JpaRepository<Asignacion
 
     long countByHabitacionIdAndHastaIsNull(Long habitacionId);
 
+    List<AsignacionHabitacion> findByHabitacionIdAndHastaIsNull(Long habitacionId);
+
     List<AsignacionHabitacion> findByHastaIsNull();
 
     List<AsignacionHabitacion> findByResidenteIdOrderByDesdeDesc(Long residenteId);

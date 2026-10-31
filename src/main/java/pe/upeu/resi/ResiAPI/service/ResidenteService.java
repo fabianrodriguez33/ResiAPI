@@ -15,6 +15,7 @@ import pe.upeu.resi.ResiAPI.dto.response.ResidenteResponses.HabitacionResumen;
 import pe.upeu.resi.ResiAPI.dto.response.ResidenteResponses.ResidenteResponse;
 import pe.upeu.resi.ResiAPI.entity.Apoderado;
 import pe.upeu.resi.ResiAPI.entity.AsignacionHabitacion;
+import pe.upeu.resi.ResiAPI.entity.Habitacion;
 import pe.upeu.resi.ResiAPI.entity.Residente;
 import pe.upeu.resi.ResiAPI.entity.ResidenteApoderado;
 import pe.upeu.resi.ResiAPI.enums.Rol;
@@ -110,7 +111,7 @@ public class ResidenteService {
     }
 
     @Transactional
-    public ResidenteResponse asignarHabitacion(Long residenteId, Long habitacionId) {
+    public ResidenteResponse asignarHabitacion(Long residenteId, Long habitacionId, String cama) {
         var res = residentes.findByIdForUpdate(residenteId).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Residente no encontrado"));
         if (!res.isActivo()) {
             throw new Excepciones.Conflicto("No se puede asignar habitación a un residente inactivo");
@@ -133,11 +134,12 @@ public class ResidenteService {
             asignaciones.saveAndFlush(a);
         });
         var nueva = new AsignacionHabitacion();
+        nueva.setCama(camaLibre(hab, cama));
         nueva.setResidenteId(residenteId);
         nueva.setHabitacionId(habitacionId);
         nueva.setDesde(ahora);
         asignaciones.save(nueva);
-        auditoria.registrar(sesion.obtener().id(), "HABITACION_ASIGNADA", "residente", residenteId, "habitacion=" + hab.getNumero());
+        auditoria.registrar(sesion.obtener().id(), "HABITACION_ASIGNADA", "residente", residenteId, "habitacion=" + hab.getNumero() + "-" + nueva.getCama());
         return aResponse(res);
     }
 
@@ -168,11 +170,33 @@ public class ResidenteService {
         }).toList();
     }
 
+    /** Letra de cama libre de la habitación: la pedida si es válida y está libre; si no, la primera libre. */
+    private String camaLibre(Habitacion hab, String pedida) {
+        var ocupadas = asignaciones.findByHabitacionIdAndHastaIsNull(hab.getId()).stream().map(AsignacionHabitacion::getCama).toList();
+        if (pedida != null) {
+            var p = pedida.trim().toUpperCase();
+            boolean valida = p.length() == 1 && p.charAt(0) >= 'A' && p.charAt(0) < 'A' + hab.getCapacidad();
+            if (!valida) {
+                throw new Excepciones.Conflicto("La cama debe ser una letra de A a " + (char) ('A' + hab.getCapacidad() - 1));
+            }
+            if (ocupadas.contains(p)) {
+                throw new Excepciones.Conflicto("La cama " + hab.getNumero() + "-" + p + " ya está ocupada");
+            }
+            return p;
+        }
+        for (int i = 0; i < hab.getCapacidad(); i++) {
+            String letra = String.valueOf((char) ('A' + i));
+            if (!ocupadas.contains(letra)) {
+                return letra;
+            }
+        }
+        throw new Excepciones.Conflicto("La habitación " + hab.getNumero() + " no tiene cupos disponibles");
+    }
+
     private ResidenteResponse aResponse(Residente r) {
         var usuario = usuarios.findById(r.getUsuarioId()).orElseThrow();
         HabitacionResumen hab = asignaciones.findByResidenteIdAndHastaIsNull(r.getId())
-                .flatMap(a -> habitaciones.findById(a.getHabitacionId()))
-                .map(h -> new HabitacionResumen(h.getId(), h.getNumero())).orElse(null);
+                .flatMap(a -> habitaciones.findById(a.getHabitacionId()).map(h -> new HabitacionResumen(h.getId(), h.getNumero(), a.getCama()))).orElse(null);
         return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), r.getTelefono(), r.isActivo(), hab);
     }
 }

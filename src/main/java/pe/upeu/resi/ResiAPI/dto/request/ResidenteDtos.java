@@ -34,7 +34,7 @@ public final class ResidenteDtos {
     public record ResidenteActualizarRequest(@Size(max = 150) String nombreCompleto, @Size(max = 20) String telefono, Boolean activo) {
     }
 
-    public record AsignacionRequest(@NotNull(message = "La habitación es obligatoria") Long habitacionId) {
+    public record AsignacionRequest(@NotNull(message = "La habitación es obligatoria") Long habitacionId, @Size(max = 1) String cama) {
     }
 
     public record ApoderadoRequest(

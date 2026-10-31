@@ -14,7 +14,7 @@ public final class ResidenteResponses {
     public record OcupacionResponse(long habitaciones, long capacidadTotal, long ocupados, long disponibles) {
     }
 
-    public record HabitacionResumen(Long id, String numero) {
+    public record HabitacionResumen(Long id, String numero, String cama) {
     }
 
     public record ResidenteResponse(Long id, Long usuarioId, String codigo, String nombreCompleto, String telefono, boolean activo,

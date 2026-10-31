@@ -110,7 +110,7 @@ public class ResidenteController {
     @PostMapping("/residentes/{id}/asignacion")
     @PreAuthorize("hasRole('ADMINISTRADOR')")
     public ResidenteResponse asignar(@PathVariable Long id, @Valid @RequestBody AsignacionRequest request) {
-        return residentes.asignarHabitacion(id, request.habitacionId());
+        return residentes.asignarHabitacion(id, request.habitacionId(), request.cama());
     }
 
     @GetMapping("/residentes/{id}/apoderados")

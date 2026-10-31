@@ -23,6 +23,9 @@ public class AsignacionHabitacion {
     @Column(name = "habitacion_id")
     private Long habitacionId;
 
+    @Column(name = "cama")
+    private String cama;
+
     @Column(name = "desde")
     private Instant desde;
 

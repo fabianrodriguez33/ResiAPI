@@ -43,6 +43,38 @@ class ResidenteIntegracionTest extends PruebaIntegracion {
     }
 
     @Test
+    void lasCamasSeAsignanPorLetraSinRepetirse() throws Exception {
+        String admin = tokenDeRol(Rol.ADMINISTRADOR);
+        long hab = crearHabitacion(admin, 2);
+        long r1 = crearResidente(admin), r2 = crearResidente(admin), r3 = crearResidente(admin);
+        asignar(admin, r1, hab);
+        var resp = mvc.perform(conToken(post("/api/v1/residentes/" + r2 + "/asignacion"), admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"habitacionId\":" + hab + "}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertEquals("B", leer(resp).get("habitacion").get("cama").asString());
+        // Elegir una cama ocupada, una letra fuera de la capacidad o una inválida no se permite.
+        for (String cama : new String[] {"A", "B", "C", "1"}) {
+            mvc.perform(conToken(post("/api/v1/residentes/" + r3 + "/asignacion"), admin).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"habitacionId\":" + hab + ",\"cama\":\"" + cama + "\"}")).andExpect(status().isConflict());
+        }
+    }
+
+    @Test
+    void lasHabitacionesDeLaResidenciaEstanCargadas() throws Exception {
+        String admin = tokenDeRol(Rol.ADMINISTRADOR);
+        var lista = leer(mvc.perform(conToken(get("/api/v1/habitaciones"), admin)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        java.util.Map<String, Integer> capacidades = new java.util.HashMap<>();
+        for (var h : lista) {
+            capacidades.put(h.get("numero").asString(), h.get("capacidad").asInt());
+        }
+        for (String n : new String[] {"101", "102", "103", "104", "201", "203", "205", "212", "215", "218", "302", "308", "402", "406"}) {
+            assertEquals(2, capacidades.get(n), "habitación " + n);
+        }
+        for (String n : new String[] {"105", "106", "202", "204", "213", "214", "301", "307", "401", "407"}) {
+            assertEquals(4, capacidades.get(n), "habitación " + n);
+        }
+    }
+
+    @Test
     void cambiarDeHabitacionLiberaElCupoAnterior() throws Exception {
         String admin = tokenDeRol(Rol.ADMINISTRADOR);
         long a = crearHabitacion(admin, 1), b = crearHabitacion(admin, 1);
