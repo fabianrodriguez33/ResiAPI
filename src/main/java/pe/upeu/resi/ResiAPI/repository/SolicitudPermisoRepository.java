@@ -32,4 +32,7 @@ public interface SolicitudPermisoRepository extends JpaRepository<SolicitudPermi
     @Modifying
     @Query("update SolicitudPermiso s set s.estado = 'VENCIDO', s.actualizadoEn = :ahora where s.estado in ('PENDIENTE_APODERADO', 'PENDIENTE_PRECEPTOR') and s.salidaSolicitada < :ahora")
     int marcarVencidas(@Param("ahora") Instant ahora);
+
+    @Query("select count(s) > 0 from SolicitudPermiso s where s.residenteId = :residenteId and s.estado in ('PENDIENTE_APODERADO', 'PENDIENTE_PRECEPTOR', 'APROBADO') and s.salidaSolicitada < :fin and s.retornoAutorizado > :inicio")
+    boolean existeSolapada(@Param("residenteId") Long residenteId, @Param("inicio") Instant inicio, @Param("fin") Instant fin);
 }

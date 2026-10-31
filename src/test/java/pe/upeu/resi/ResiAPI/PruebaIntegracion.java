@@ -10,7 +10,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.AbstractMockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import pe.upeu.resi.ResiAPI.enums.Rol;
 import pe.upeu.resi.ResiAPI.service.UsuarioService;
@@ -77,7 +77,7 @@ public abstract class PruebaIntegracion {
         return tokenDe(crearPersonal(rol));
     }
 
-    protected MockHttpServletRequestBuilder conToken(MockHttpServletRequestBuilder req, String token) {
+    protected <B extends AbstractMockHttpServletRequestBuilder<B>> B conToken(B req, String token) {
         return req.header("Authorization", "Bearer " + token);
     }
 
