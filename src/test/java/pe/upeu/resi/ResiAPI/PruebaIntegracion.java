@@ -58,4 +58,26 @@ public abstract class PruebaIntegracion {
     protected JsonNode leer(String cuerpo) throws Exception {
         return json.readTree(cuerpo);
     }
+
+    /** Crea una habitación con la capacidad indicada y devuelve su id. */
+    protected long crearHabitacion(String tokenAdmin, int capacidad) throws Exception {
+        var res = mvc.perform(conToken(MockMvcRequestBuilders.post("/api/v1/habitaciones"), tokenAdmin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"numero\":\"T" + sufijo() + "\",\"capacidad\":" + capacidad + "}")).andReturn().getResponse();
+        return leer(res.getContentAsString()).get("id").asLong();
+    }
+
+    /** Registra un residente (API de administración) y devuelve su id; el usuario queda en {@code ultimoUsuario}. */
+    protected long crearResidente(String tokenAdmin) throws Exception {
+        String user = "res_" + sufijo();
+        var res = mvc.perform(conToken(MockMvcRequestBuilders.post("/api/v1/residentes"), tokenAdmin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"" + user + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Residente " + user
+                        + "\",\"codigo\":\"" + user + "\"}")).andReturn().getResponse();
+        if (res.getStatus() != 201) {
+            throw new IllegalStateException("No se pudo crear el residente: " + res.getStatus());
+        }
+        ultimoUsuario = user;
+        return leer(res.getContentAsString()).get("id").asLong();
+    }
+
+    protected String ultimoUsuario;
 }
