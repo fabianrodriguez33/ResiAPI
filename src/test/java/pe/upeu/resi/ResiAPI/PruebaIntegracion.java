@@ -6,6 +6,8 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -16,6 +18,7 @@ import pe.upeu.resi.ResiAPI.service.UsuarioService;
 /** Base de las pruebas de integración: PostgreSQL real, MockMvc y utilidades para crear usuarios y tokens. */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(RelojPrueba.Configuracion.class)
 public abstract class PruebaIntegracion {
 
     protected static final String CLAVE = "Clave-de-prueba-123";
@@ -26,6 +29,29 @@ public abstract class PruebaIntegracion {
     protected ObjectMapper json;
     @Autowired
     protected UsuarioService usuarioService;
+    @Autowired
+    protected RelojPrueba reloj;
+
+    @AfterEach
+    void liberarReloj() {
+        reloj.liberar();
+    }
+
+    /** Fija el reloj en una hora local de Lima (UTC-5, sin horario de verano). */
+    protected void fijarLima(java.time.LocalDate fecha, int hora, int minuto) {
+        reloj.fijar(fecha.atTime(hora, minuto).atZone(java.time.ZoneId.of("America/Lima")).toInstant());
+    }
+
+    /** Lunes aleatorio lejano: evita choques con sesiones de culto de otras pruebas o ejecuciones. */
+    protected java.time.LocalDate lunesAleatorio() {
+        return java.time.LocalDate.of(2031, 1, 6).plusWeeks(new java.util.Random().nextInt(3000));
+    }
+
+    protected String qrDe(String username) throws Exception {
+        String t = tokenDe(username);
+        return leer(mvc.perform(MockMvcRequestBuilders.get("/api/v1/residentes/yo/qr").header("Authorization", "Bearer " + t))
+                .andReturn().getResponse().getContentAsString()).get("contenido").asString();
+    }
 
     protected String sufijo() {
         return UUID.randomUUID().toString().substring(0, 8);
