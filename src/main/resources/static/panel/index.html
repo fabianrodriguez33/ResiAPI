@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ResiUP · Panel</title>
+<style>
+  :root { --azul:#1d4ed8; --borde:#d9dee8; --fondo:#f4f6fb; --texto:#111827; --suave:#6b7280; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.4 system-ui, Segoe UI, Roboto, sans-serif; background:var(--fondo); color:var(--texto); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 24px; background:#0b2f6b; color:#fff; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  header button { background:transparent; color:#fff; border:1px solid #ffffff80; }
+  nav { display:flex; gap:4px; padding:12px 24px 0; flex-wrap:wrap; }
+  nav button { border:0; background:transparent; padding:8px 14px; border-bottom:3px solid transparent; cursor:pointer; font-size:15px; }
+  nav button.on { border-color:var(--azul); color:var(--azul); font-weight:600; }
+  main { padding:16px 24px 48px; max-width:1100px; }
+  section { display:none; } section.on { display:block; }
+  table { border-collapse:collapse; width:100%; background:#fff; border:1px solid var(--borde); }
+  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--borde); }
+  th { background:#eef2fa; font-weight:600; }
+  form.fila { display:flex; gap:8px; flex-wrap:wrap; align-items:end; margin:12px 0; padding:12px; background:#fff; border:1px solid var(--borde); }
+  label { display:flex; flex-direction:column; font-size:12px; color:var(--suave); gap:2px; }
+  input, select { padding:7px 8px; border:1px solid var(--borde); border-radius:6px; font:inherit; min-width:130px; }
+  button { padding:7px 12px; border:1px solid var(--azul); background:var(--azul); color:#fff; border-radius:6px; font:inherit; cursor:pointer; }
+  button.sec { background:#fff; color:var(--azul); }
+  button.rojo { background:#fff; color:#b91c1c; border-color:#b91c1c; }
+  .msg { padding:8px 12px; border-radius:6px; margin:8px 0; display:none; }
+  .msg.ok { display:block; background:#dcfce7; } .msg.err { display:block; background:#fee2e2; }
+  #login { max-width:340px; margin:80px auto; padding:24px; background:#fff; border:1px solid var(--borde); border-radius:10px; display:flex; flex-direction:column; gap:12px; }
+  #login h2 { margin:0; }
+  dialog { border:1px solid var(--borde); border-radius:10px; padding:20px; max-width:560px; width:92%; }
+  dialog form { display:flex; flex-wrap:wrap; gap:10px; }
+  .oculto { display:none !important; }
+  small { color:var(--suave); }
+  .AD { color:#047857; font-weight:700; } .A { color:#1d4ed8; font-weight:700; } .B { color:#b45309; font-weight:700; } .C { color:#b91c1c; font-weight:700; }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h2>ResiUP · Panel</h2>
+  <small>Residencia Universitaria Fernando Stahl. Solo administración y pastores.</small>
+  <label>Usuario<input id="lUser" autocomplete="username"></label>
+  <label>Contraseña<input id="lPass" type="password" autocomplete="current-password"></label>
+  <div id="lMsg" class="msg"></div>
+  <button id="lBtn">Ingresar</button>
+</div>
+
+<div id="app" class="oculto">
+  <header><h1>ResiUP · Panel</h1><span id="quien"></span><button id="salir">Salir</button></header>
+  <nav id="menu"></nav>
+  <main>
+    <div id="msg" class="msg"></div>
+
+    <section id="s-usuarios">
+      <h2>Usuarios</h2>
+      <small>Solo la administración crea cuentas: nadie se registra solo. Los residentes se crean en «Residentes».</small>
+      <form class="fila" id="fUsuario">
+        <label>Usuario<input name="username" required></label>
+        <label>Contraseña (mín. 8)<input name="password" type="password" required minlength="8"></label>
+        <label>Nombre completo<input name="nombreCompleto" required></label>
+        <label>Rol<select name="rol"><option value="PRECEPTOR">Pastor</option><option value="GARITA">Garita</option><option value="APODERADO">Padre/madre</option><option value="ADMINISTRADOR">Administrador</option></select></label>
+        <label>DNI<input name="dni" pattern="\d{8}" maxlength="8"></label>
+        <label>Nacimiento<input name="fechaNacimiento" type="date"></label>
+        <button>Crear</button>
+      </form>
+      <table id="tUsuarios"></table>
+    </section>
+
+    <section id="s-residentes">
+      <h2>Residentes</h2>
+      <form class="fila" id="fResidente">
+        <label>Usuario<input name="username" required></label>
+        <label>Contraseña (mín. 8)<input name="password" type="password" required minlength="8"></label>
+        <label>Nombre completo<input name="nombreCompleto" required></label>
+        <label>Código (9 dígitos)<input name="codigo" required pattern="\d{9}" maxlength="9"></label>
+        <label>DNI (8 dígitos)<input name="dni" required pattern="\d{8}" maxlength="8"></label>
+        <label>Nacimiento<input name="fechaNacimiento" type="date"></label>
+        <label>Teléfono<input name="telefono"></label>
+        <button>Crear residente</button>
+      </form>
+      <table id="tResidentes"></table>
+    </section>
+
+    <section id="s-habitaciones">
+      <h2>Habitaciones</h2>
+      <form class="fila" id="fHabitacion">
+        <label>Número<input name="numero" required></label>
+        <label>Capacidad<input name="capacidad" type="number" min="1" max="12" required></label>
+        <button>Crear</button>
+      </form>
+      <table id="tHabitaciones"></table>
+    </section>
+
+    <section id="s-dias">
+      <h2>Días sin culto</h2>
+      <small>Feriados y vacaciones (lunes a viernes). No cortan la racha de los residentes.</small>
+      <form class="fila" id="fDia">
+        <label>Día<input name="fecha" type="date" required></label>
+        <label>Motivo<input name="motivo" required maxlength="120"></label>
+        <button>Marcar</button>
+      </form>
+      <table id="tDias"></table>
+    </section>
+
+    <section id="s-notas">
+      <h2>Notas del mes</h2>
+      <small>Cultos: AD 20 o más · A 15-19 · B 11-14 · C 0-10. Limpieza (promedio): AD 18-20 · A 15-17 · B 11-14 · C 0-10.</small>
+      <form class="fila" id="fNotas">
+        <label>Mes<input name="mes" type="month" required></label>
+        <button>Ver</button>
+        <button type="button" class="sec" id="bExcel">Descargar Excel</button>
+      </form>
+      <table id="tNotas"></table>
+    </section>
+  </main>
+</div>
+
+<dialog id="dRes"><h3 id="dTitulo"></h3>
+  <form id="fEditar" method="dialog">
+    <label>Nombre completo<input name="nombreCompleto"></label>
+    <label>Código<input name="codigo" pattern="\d{9}" maxlength="9"></label>
+    <label>DNI<input name="dni" pattern="\d{8}" maxlength="8"></label>
+    <label>Nacimiento<input name="fechaNacimiento" type="date"></label>
+    <label>Teléfono<input name="telefono"></label>
+    <label>Solicita permisos solo<select name="puedeSolicitarSolo"><option value="false">No</option><option value="true">Sí</option></select></label>
+    <label>Activo<select name="activo"><option value="true">Sí</option><option value="false">No</option></select></label>
+    <div style="width:100%"><button>Guardar datos</button> <button type="button" class="sec" id="cerrarD">Cerrar</button></div>
+  </form>
+  <hr>
+  <form id="fAsignar" class="fila">
+    <label>Habitación<select name="habitacionId"></select></label>
+    <label>Cama (letra, opcional)<input name="cama" maxlength="1"></label>
+    <button>Asignar habitación</button>
+  </form>
+  <form id="fPadre" class="fila">
+    <label>Usuario del padre/madre<input name="username" required></label>
+    <label>Nombre<input name="nombre" required></label>
+    <label>Parentesco<input name="parentesco" placeholder="Padre, Madre…"></label>
+    <label>Contraseña (solo si la cuenta es nueva)<input name="password" type="password"></label>
+    <button>Vincular padre/madre</button>
+  </form>
+  <small id="padres"></small>
+</dialog>
+
+<script>
+const API = '/api/v1';
+let token = sessionStorage.getItem('token'), roles = JSON.parse(sessionStorage.getItem('roles') || '[]'), nombre = sessionStorage.getItem('nombre');
+const $ = s => document.querySelector(s);
+let habitaciones = [], editando = null;
+
+function h(tag, attrs, ...hijos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) { if (k === 'onclick') e.onclick = v; else if (v !== null && v !== undefined) e.setAttribute(k, v); }
+  for (const x of hijos.flat()) e.append(x instanceof Node ? x : document.createTextNode(x ?? ''));
+  return e;
+}
+function aviso(texto, ok = true) { const m = $('#msg'); m.className = 'msg ' + (ok ? 'ok' : 'err'); m.textContent = texto; if (ok) setTimeout(() => { m.className = 'msg'; }, 4000); }
+
+async function api(ruta, op = {}) {
+  const r = await fetch(API + ruta, { ...op, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) } });
+  if (r.status === 401 && token) { salir(); throw new Error('Sesión vencida'); }
+  if (!r.ok) {
+    let t = 'Error ' + r.status;
+    try { const j = await r.json(); t = (j.validationErrors ? Object.values(j.validationErrors).join(' · ') : '') || j.message || t; } catch (_) {}
+    throw new Error(t);
+  }
+  const tipo = r.headers.get('content-type') || '';
+  return r.status === 204 ? null : tipo.includes('json') ? r.json() : r.blob();
+}
+const enviar = (ruta, metodo, cuerpo) => api(ruta, { method: metodo, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+function datos(form) {
+  const o = {};
+  for (const [k, v] of new FormData(form)) { if (v !== '') o[k] = v; }
+  return o;
+}
+function tabla(el, cabecera, filas) {
+  el.replaceChildren(h('thead', {}, h('tr', {}, cabecera.map(c => h('th', {}, c)))), h('tbody', {}, filas.map(f => h('tr', {}, f.map(c => h('td', {}, c))))));
+}
+
+// ---- inicio de sesión
+$('#lBtn').onclick = async () => {
+  try {
+    const r = await enviar('/auth/login', 'POST', { username: $('#lUser').value.trim(), password: $('#lPass').value });
+    if (!r.roles.includes('ADMINISTRADOR') && !r.roles.includes('PRECEPTOR')) throw new Error('Este panel es solo para administración y pastores');
+    token = r.token; roles = r.roles; nombre = r.nombreCompleto;
+    sessionStorage.setItem('token', token); sessionStorage.setItem('roles', JSON.stringify(roles)); sessionStorage.setItem('nombre', nombre);
+    iniciar();
+  } catch (e) { const m = $('#lMsg'); m.className = 'msg err'; m.textContent = e.message.includes('Error 401') ? 'Usuario o contraseña incorrectos' : e.message; }
+};
+$('#lPass').onkeydown = e => { if (e.key === 'Enter') $('#lBtn').click(); };
+function salir() { token = null; sessionStorage.clear(); $('#app').classList.add('oculto'); $('#login').classList.remove('oculto'); }
+$('#salir').onclick = salir;
+
+const SECCIONES = [['usuarios', 'Usuarios', ['ADMINISTRADOR']], ['residentes', 'Residentes', ['ADMINISTRADOR']], ['habitaciones', 'Habitaciones', ['ADMINISTRADOR']],
+  ['dias', 'Días sin culto', ['ADMINISTRADOR', 'PRECEPTOR']], ['notas', 'Notas del mes', ['ADMINISTRADOR', 'PRECEPTOR']]];
+const CARGAR = { usuarios: cargarUsuarios, residentes: cargarResidentes, habitaciones: cargarHabitaciones, dias: cargarDias, notas: cargarNotas };
+
+function iniciar() {
+  $('#login').classList.add('oculto'); $('#app').classList.remove('oculto');
+  $('#quien').textContent = nombre + ' (' + (roles.includes('ADMINISTRADOR') ? 'Administración' : 'Pastor') + ')';
+  const visibles = SECCIONES.filter(s => s[2].some(r => roles.includes(r)));
+  $('#menu').replaceChildren(...visibles.map(s => h('button', { 'data-s': s[0], onclick: () => ir(s[0]) }, s[1])));
+  ir(visibles[0][0]);
+}
+async function ir(s) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
+  document.querySelectorAll('section').forEach(x => x.classList.toggle('on', x.id === 's-' + s));
+  try { await CARGAR[s](); } catch (e) { aviso(e.message, false); }
+}
+const accion = async (f, ok) => { try { await f(); if (ok) aviso(ok); } catch (e) { aviso(e.message, false); } };
+
+// ---- usuarios
+async function cargarUsuarios() {
+  const p = await api('/usuarios?tamanio=100');
+  const rol = { PRECEPTOR: 'Pastor', GARITA: 'Garita', APODERADO: 'Padre/madre', ADMINISTRADOR: 'Administrador', RESIDENTE: 'Residente' };
+  tabla($('#tUsuarios'), ['Usuario', 'Nombre', 'Rol', 'Activo', ''], p.contenido.map(u => [u.username, u.nombreCompleto, rol[u.rol] || u.rol, u.activo ? 'Sí' : 'No',
+    h('span', {},
+      h('button', { class: 'sec', onclick: () => accion(async () => { await enviar('/usuarios/' + u.id, 'PATCH', { activo: !u.activo }); cargarUsuarios(); }, 'Guardado') }, u.activo ? 'Desactivar' : 'Activar'), ' ',
+      h('button', { class: 'sec', onclick: () => { const c = prompt('Nueva contraseña para ' + u.username + ' (mín. 8):'); if (c) accion(() => enviar('/usuarios/' + u.id, 'PATCH', { password: c }), 'Contraseña cambiada'); } }, 'Cambiar clave'))]));
+}
+$('#fUsuario').onsubmit = e => { e.preventDefault(); accion(async () => { await enviar('/usuarios', 'POST', datos(e.target)); e.target.reset(); cargarUsuarios(); }, 'Usuario creado'); };
+
+// ---- residentes
+async function cargarResidentes() {
+  habitaciones = await api('/habitaciones');
+  const p = await api('/residentes?tamanio=100');
+  tabla($('#tResidentes'), ['Código', 'Nombre', 'Habitación', 'Permisos solo', 'Activo', ''], p.contenido.map(r => [r.codigo, r.nombreCompleto,
+    r.habitacion ? r.habitacion.numero + '-' + (r.habitacion.cama || '') : '—', r.puedeSolicitarSolo ? 'Sí' : 'No', r.activo ? 'Sí' : 'No',
+    h('button', { class: 'sec', onclick: () => abrirResidente(r) }, 'Editar')]));
+}
+$('#fResidente').onsubmit = e => { e.preventDefault(); accion(async () => { await enviar('/residentes', 'POST', datos(e.target)); e.target.reset(); cargarResidentes(); }, 'Residente creado'); };
+async function abrirResidente(r) {
+  editando = r;
+  $('#dTitulo').textContent = r.nombreCompleto + ' (' + r.codigo + ')';
+  const f = $('#fEditar');
+  f.nombreCompleto.value = r.nombreCompleto; f.codigo.value = r.codigo; f.dni.value = r.dni || ''; f.fechaNacimiento.value = r.fechaNacimiento || '';
+  f.telefono.value = r.telefono || ''; f.puedeSolicitarSolo.value = String(r.puedeSolicitarSolo); f.activo.value = String(r.activo);
+  $('#fAsignar').habitacionId.replaceChildren(...habitaciones.filter(x => x.activa).map(x => h('option', { value: x.id }, x.numero + ' (' + x.disponibles + ' libres)')));
+  const ps = await api('/residentes/' + r.id + '/apoderados');
+  $('#padres').textContent = ps.length ? 'Padres/madres vinculados: ' + ps.map(p => p.nombre + (p.usuario ? ' (' + p.usuario + ')' : '')).join(', ') : 'Sin padres/madres vinculados.';
+  $('#dRes').showModal();
+}
+$('#cerrarD').onclick = () => $('#dRes').close();
+$('#fEditar').onsubmit = e => { e.preventDefault(); accion(async () => {
+  const d = datos(e.target); d.puedeSolicitarSolo = d.puedeSolicitarSolo === 'true'; d.activo = d.activo === 'true';
+  await enviar('/residentes/' + editando.id, 'PATCH', d); $('#dRes').close(); cargarResidentes(); }, 'Residente actualizado'); };
+$('#fAsignar').onsubmit = e => { e.preventDefault(); accion(async () => {
+  const d = datos(e.target); d.habitacionId = Number(d.habitacionId); await enviar('/residentes/' + editando.id + '/asignacion', 'POST', d); $('#dRes').close(); cargarResidentes(); }, 'Habitación asignada'); };
+$('#fPadre').onsubmit = e => { e.preventDefault(); accion(async () => {
+  const d = datos(e.target); d.principal = true; await enviar('/residentes/' + editando.id + '/apoderados', 'POST', d); e.target.reset(); abrirResidente(editando); }, 'Padre/madre vinculado'); };
+
+// ---- habitaciones
+async function cargarHabitaciones() {
+  const l = await api('/habitaciones');
+  tabla($('#tHabitaciones'), ['Número', 'Capacidad', 'Ocupantes', 'Libres', 'Activa'], l.map(x => [x.numero, x.capacidad, x.ocupantes, x.disponibles, x.activa ? 'Sí' : 'No']));
+}
+$('#fHabitacion').onsubmit = e => { e.preventDefault(); accion(async () => { const d = datos(e.target); d.capacidad = Number(d.capacidad); await enviar('/habitaciones', 'POST', d); e.target.reset(); cargarHabitaciones(); }, 'Habitación creada'); };
+
+// ---- días sin culto
+async function cargarDias() {
+  const l = await api('/calendario/dias-sin-culto');
+  tabla($('#tDias'), ['Día', 'Motivo', ''], l.map(d => [d.fecha, d.motivo,
+    h('button', { class: 'rojo', onclick: () => { if (confirm('¿Quitar ' + d.fecha + '?')) accion(async () => { await enviar('/calendario/dias-sin-culto/' + d.fecha, 'DELETE'); cargarDias(); }, 'Día quitado'); } }, 'Quitar')]));
+}
+$('#fDia').onsubmit = e => { e.preventDefault(); accion(async () => { await enviar('/calendario/dias-sin-culto', 'POST', datos(e.target)); e.target.reset(); cargarDias(); }, 'Día marcado'); };
+
+// ---- notas del mes
+function mesElegido() { const v = $('#fNotas').mes.value; if (!v) { const hoy = new Date(); $('#fNotas').mes.value = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0'); return mesElegido(); } const [a, m] = v.split('-'); return { anio: a, mes: Number(m) }; }
+async function cargarNotas() {
+  const { anio, mes } = mesElegido();
+  const l = await api('/reportes/mensual?anio=' + anio + '&mes=' + mes);
+  const nota = n => h('span', { class: n || '' }, n || '—');
+  tabla($('#tNotas'), ['Código', 'Nombre', 'Hab.', 'Cultos', 'Nota', 'Limpieza (prom.)', 'Nota'], l.map(f => [f.codigo, f.nombreCompleto, f.habitacion, f.resumen.cultos, nota(f.resumen.notaCultos),
+    f.resumen.promedioLimpieza == null ? 'Sin evaluar' : f.resumen.promedioLimpieza.toFixed(1), nota(f.resumen.notaLimpieza)]));
+}
+$('#fNotas').onsubmit = e => { e.preventDefault(); accion(cargarNotas); };
+$('#bExcel').onclick = () => accion(async () => {
+  const { anio, mes } = mesElegido();
+  const blob = await api('/reportes/mensual.xlsx?anio=' + anio + '&mes=' + mes);
+  const a = h('a', { href: URL.createObjectURL(blob), download: 'notas-' + anio + '-' + String(mes).padStart(2, '0') + '.xlsx' });
+  document.body.append(a); a.click(); a.remove();
+}, 'Excel generado');
+
+if (token) iniciar();
+</script>
+</body>
+</html>

@@ -65,6 +65,9 @@ public class LimpiezaService {
         if (r.fecha().isAfter(hoy)) {
             throw new Excepciones.SolicitudInvalida("La fecha no puede ser futura", Map.of("fecha", "La fecha no puede ser futura"));
         }
+        if (r.fecha().getDayOfWeek() == java.time.DayOfWeek.SATURDAY || r.fecha().getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            throw new Excepciones.SolicitudInvalida("La limpieza se evalúa de lunes a viernes", Map.of("fecha", "Elige un día de lunes a viernes"));
+        }
         validarPuntajes(r.puntajes());
         if (evaluaciones.existsByResidenteIdAndFecha(r.residenteId(), r.fecha())) {
             throw new Excepciones.Conflicto("El residente ya tiene una evaluación en esa fecha");
@@ -130,6 +133,9 @@ public class LimpiezaService {
         LocalDate hoy = reloj.instant().atZone(zona).toLocalDate();
         if (r.fecha().isAfter(hoy)) {
             throw new Excepciones.SolicitudInvalida("La fecha no puede ser futura", Map.of("fecha", "La fecha no puede ser futura"));
+        }
+        if (r.fecha().getDayOfWeek() == java.time.DayOfWeek.SATURDAY || r.fecha().getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            throw new Excepciones.SolicitudInvalida("La limpieza se evalúa de lunes a viernes", Map.of("fecha", "Elige un día de lunes a viernes"));
         }
         var ocupantes = asignaciones.findByHabitacionIdAndHastaIsNull(habitacionId).stream().map(AsignacionHabitacion::getResidenteId).collect(Collectors.toSet());
         var vistos = new java.util.HashSet<Long>();

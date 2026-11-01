@@ -13,6 +13,8 @@ import pe.upeu.resi.ResiAPI.entity.Residente;
 
 public interface ResidenteRepository extends JpaRepository<Residente, Long> {
 
+    java.util.List<Residente> findByActivoTrueOrderByCodigoAsc();
+
     Optional<Residente> findByUsuarioId(Long usuarioId);
 
     boolean existsByCodigo(String codigo);

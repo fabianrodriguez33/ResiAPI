@@ -112,13 +112,24 @@ class PerfilCorreoIntegracionTest extends PruebaIntegracion {
     }
 
     @Test
-    void laAdministracionSoloCreaResidentesPastoresYGarita() throws Exception {
+    void soloLaAdministracionCreaCuentasDeCualquierRolMenosResidentes() throws Exception {
         String admin = tokenDeRol(Rol.ADMINISTRADOR);
-        for (String rol : new String[] {"ADMINISTRADOR", "APODERADO", "RESIDENTE"}) {
+        mvc.perform(conToken(post("/api/v1/usuarios"), admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"x_" + sufijo() + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Persona Prueba\",\"rol\":\"RESIDENTE\"}"))
+                .andExpect(status().isBadRequest());
+        for (String rol : new String[] {"ADMINISTRADOR", "APODERADO"}) {
             mvc.perform(conToken(post("/api/v1/usuarios"), admin).contentType(MediaType.APPLICATION_JSON)
                     .content("{\"username\":\"x_" + sufijo() + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Persona Prueba\",\"rol\":\"" + rol + "\"}"))
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$.rol").value(rol));
         }
+        // Un padre creado así se vincula luego a su hijo con su mismo usuario.
+        long hijo = crearResidente(admin);
+        String padre = "padre_" + sufijo();
+        mvc.perform(conToken(post("/api/v1/usuarios"), admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"" + padre + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Padre Prueba\",\"rol\":\"APODERADO\"}")).andExpect(status().isCreated());
+        mvc.perform(conToken(post("/api/v1/residentes/" + hijo + "/apoderados"), admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nombre\":\"Padre Prueba\",\"parentesco\":\"Padre\",\"principal\":true,\"username\":\"" + padre + "\"}")).andExpect(status().isCreated());
+        mvc.perform(conToken(get("/api/v1/familia/hijos"), tokenDe(padre))).andExpect(status().isOk()).andExpect(jsonPath("$[0].residenteId").value(hijo));
         String dni = dniAleatorio();
         mvc.perform(conToken(post("/api/v1/usuarios"), admin).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"p_" + sufijo() + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Pastor Prueba Uno\",\"rol\":\"PRECEPTOR\",\"dni\":\"" + dni

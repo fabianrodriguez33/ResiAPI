@@ -112,7 +112,9 @@ class CultoLimpiezaIntegracionTest extends PruebaIntegracion {
         String preceptor = tokenDeRol(Rol.PRECEPTOR);
         long id = crearResidente(admin);
         String residente = tokenDe(ultimoUsuario);
-        String hoy = LocalDate.now().toString();
+        LocalDate miercoles = lunesAleatorio().plusDays(2);
+        fijarLima(miercoles, 10, 0);
+        String hoy = miercoles.toString();
         String ok = "{\"residenteId\":" + id + ",\"fecha\":\"" + hoy + "\",\"puntajes\":{\"ROPERO\":5,\"CAMA\":3,\"ESCRITORIO\":2,\"BASURA\":3,\"OLORES\":3,\"PISO\":1},\"observacion\":\"Buen estado\"}";
         mvc.perform(conToken(post("/api/v1/limpieza/evaluaciones"), preceptor).contentType(MediaType.APPLICATION_JSON).content(ok))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.total").value(17)).andExpect(jsonPath("$.maximo").value(20));
@@ -123,12 +125,12 @@ class CultoLimpiezaIntegracionTest extends PruebaIntegracion {
         // Excede el máximo del ropero (5) y valor negativo
         String malo = "{\"residenteId\":" + id + ",\"fecha\":\"2030-01-01\",\"puntajes\":{\"ROPERO\":6,\"CAMA\":-1,\"ESCRITORIO\":2,\"BASURA\":3,\"OLORES\":3,\"PISO\":1}}";
         mvc.perform(conToken(post("/api/v1/limpieza/evaluaciones"), preceptor).contentType(MediaType.APPLICATION_JSON).content(malo)).andExpect(status().isBadRequest());
-        String conFecha = malo.replace("2030-01-01", LocalDate.now().minusDays(3).toString());
+        String conFecha = malo.replace("2030-01-01", miercoles.minusDays(1).toString());
         mvc.perform(conToken(post("/api/v1/limpieza/evaluaciones"), preceptor).contentType(MediaType.APPLICATION_JSON).content(conFecha))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.ROPERO").exists()).andExpect(jsonPath("$.validationErrors.CAMA").exists());
 
         // Criterio faltante
-        String incompleto = "{\"residenteId\":" + id + ",\"fecha\":\"" + LocalDate.now().minusDays(5) + "\",\"puntajes\":{\"ROPERO\":5}}";
+        String incompleto = "{\"residenteId\":" + id + ",\"fecha\":\"" + miercoles.minusDays(2) + "\",\"puntajes\":{\"ROPERO\":5}}";
         mvc.perform(conToken(post("/api/v1/limpieza/evaluaciones"), preceptor).contentType(MediaType.APPLICATION_JSON).content(incompleto))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.PISO").exists());
 

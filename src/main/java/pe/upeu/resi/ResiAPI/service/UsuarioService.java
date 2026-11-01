@@ -27,6 +27,7 @@ public class UsuarioService {
     private final SesionActual sesion;
     private final Clock reloj;
     private final PerfilService perfil;
+    private final pe.upeu.resi.ResiAPI.repository.ApoderadoRepository apoderados;
 
     @Transactional(readOnly = true)
     public UsuarioResponse actual() {
@@ -40,17 +41,24 @@ public class UsuarioService {
     }
 
     /**
-     * Crea personal: pastor (preceptor) o garita. Los residentes se crean desde /residentes, las cuentas de los padres
-     * desde la ficha de cada residente, y el administrador inicial sale de la configuración del servidor.
+     * Solo la administración crea cuentas (nadie se registra solo): pastor, garita, administrador y padres/madres.
+     * Los residentes se crean desde /residentes.
      */
     @Transactional
     public UsuarioResponse crearPersonal(UsuarioRequest r) {
-        if (r.rol() != Rol.PRECEPTOR && r.rol() != Rol.GARITA) {
-            throw new Excepciones.SolicitudInvalida("Desde aquí solo se crean pastores y personal de garita",
-                    java.util.Map.of("rol", "Elige Pastor (PRECEPTOR) o Garita"));
+        if (r.rol() == Rol.RESIDENTE) {
+            throw new Excepciones.SolicitudInvalida("Los residentes se registran desde el módulo de residentes",
+                    java.util.Map.of("rol", "Usa el registro de residentes"));
         }
         var u = crear(r.username(), r.password(), r.nombreCompleto(), r.rol());
         asignarIdentidad(u, r.dni(), r.fechaNacimiento());
+        if (r.rol() == Rol.APODERADO) {
+            // La cuenta del padre/madre necesita su ficha para poder vincularla después a sus hijos.
+            var a = new pe.upeu.resi.ResiAPI.entity.Apoderado();
+            a.setNombre(u.getNombreCompleto());
+            a.setUsuarioId(u.getId());
+            apoderados.save(a);
+        }
         return aResponse(u);
     }
 

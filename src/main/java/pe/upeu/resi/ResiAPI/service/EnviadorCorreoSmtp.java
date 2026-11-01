@@ -19,14 +19,28 @@ public class EnviadorCorreoSmtp implements EnviadorCorreo {
 
     private final ObjectProvider<JavaMailSender> remitente;
     private final String desde;
+    private final java.util.Set<String> permitidos;
 
-    public EnviadorCorreoSmtp(ObjectProvider<JavaMailSender> remitente, @Value("${resi.correo.desde:no-responder@resiup.local}") String desde) {
+    /**
+     * [permitidos]: correos a los que se puede escribir, separados por coma; vacío = cualquiera. Mientras se prueba el envío
+     * real se limita a una cuenta para no molestar a nadie más. [usuarioSmtp] es el remitente por omisión (Gmail y Outlook
+     * exigen que coincida con la cuenta que inicia sesión).
+     */
+    public EnviadorCorreoSmtp(ObjectProvider<JavaMailSender> remitente,
+                              @Value("${resi.correo.desde:}") String desde,
+                              @Value("${spring.mail.username:}") String usuarioSmtp,
+                              @Value("${resi.correo.permitidos:}") String permitidos) {
         this.remitente = remitente;
-        this.desde = desde;
+        this.desde = !desde.isBlank() ? desde : !usuarioSmtp.isBlank() ? usuarioSmtp : "no-responder@resiup.local";
+        this.permitidos = java.util.Arrays.stream(permitidos.split(",")).map(String::trim).filter(x -> !x.isEmpty())
+                .map(String::toLowerCase).collect(java.util.stream.Collectors.toSet());
     }
 
     @Override
     public void enviarCodigo(String destino, String codigo) {
+        if (!permitidos.isEmpty() && !permitidos.contains(destino.toLowerCase())) {
+            throw new Excepciones.Conflicto("Por ahora solo se pueden verificar los correos autorizados por la administración");
+        }
         var sender = remitente.getIfAvailable();
         if (sender == null) {
             log.warn("SMTP sin configurar: el código de verificación para {} es {}", destino, codigo);
