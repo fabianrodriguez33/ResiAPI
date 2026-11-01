@@ -92,12 +92,6 @@ public class PermisoController {
         return permisos.resumenDelResidente(id);
     }
 
-    @PostMapping("/solicitudes/{id}/decision")
-    @PreAuthorize("hasRole('PRECEPTOR')")
-    public SolicitudResponse decidir(@PathVariable Long id, @Valid @RequestBody DecisionRequest request) {
-        return permisos.decidir(id, request);
-    }
-
     @PostMapping("/solicitudes/{id}/enlace-apoderado")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public EnlaceApoderadoResponse enlaceApoderado(@PathVariable Long id) {

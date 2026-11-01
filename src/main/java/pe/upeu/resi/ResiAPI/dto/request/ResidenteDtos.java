@@ -27,8 +27,20 @@ public final class ResidenteDtos {
             @NotBlank(message = "La contraseña es obligatoria")
             @Size(min = 8, max = 72, message = "La contraseña debe tener entre 8 y 72 caracteres") String password,
             @NotBlank(message = "El nombre es obligatorio") @Size(max = 150) String nombreCompleto,
-            @NotBlank(message = "El código es obligatorio") @Size(max = 20) String codigo,
+            @NotBlank(message = "El código universitario es obligatorio")
+            @Pattern(regexp = "\\d{9}", message = "El código universitario tiene 9 dígitos (ej. 202410354)") String codigo,
             @Size(max = 20) String telefono) {
+    }
+
+    /**
+     * Datos que el propio residente puede editar. {@code null} = no cambia; una cadena vacía borra el dato (correo, teléfono, carrera).
+     */
+    public record PerfilRequest(
+            @Email(message = "Correo inválido") @Size(max = 150) String email,
+            @Size(max = 20) String telefono,
+            @Pattern(regexp = "\\d{9}", message = "El código universitario tiene 9 dígitos (ej. 202410354)") String codigo,
+            @Size(max = 100, message = "Máximo 100 caracteres") String carrera,
+            @Min(value = 1, message = "El ciclo va de 1 a 14") @Max(value = 14, message = "El ciclo va de 1 a 14") Integer ciclo) {
     }
 
     public record ResidenteActualizarRequest(@Size(max = 150) String nombreCompleto, @Size(max = 20) String telefono, Boolean activo,

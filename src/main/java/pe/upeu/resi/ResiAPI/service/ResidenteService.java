@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.ApoderadoRequest;
+import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.PerfilRequest;
 import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.ResidenteActualizarRequest;
 import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.ResidenteRequest;
 import pe.upeu.resi.ResiAPI.dto.response.PaginaResponse;
@@ -77,6 +78,32 @@ public class ResidenteService {
     @Transactional(readOnly = true)
     public ResidenteResponse yo() {
         return aResponse(residenteActual());
+    }
+
+    /** El residente edita sus propios datos de contacto y académicos. El nombre completo lo gestiona la administración. */
+    @Transactional
+    public ResidenteResponse actualizarPerfil(PerfilRequest r) {
+        var res = residentes.findByIdForUpdate(residenteActual().getId()).orElseThrow();
+        if (r.codigo() != null && !r.codigo().equals(res.getCodigo())) {
+            if (residentes.existsByCodigo(r.codigo())) {
+                throw new Excepciones.Conflicto("Ya existe un residente con el código " + r.codigo());
+            }
+            res.setCodigo(r.codigo());
+        }
+        if (r.email() != null) {
+            res.setEmail(r.email().isBlank() ? null : r.email().trim());
+        }
+        if (r.telefono() != null) {
+            res.setTelefono(r.telefono().isBlank() ? null : r.telefono().trim());
+        }
+        if (r.carrera() != null) {
+            res.setCarrera(r.carrera().isBlank() ? null : r.carrera().trim());
+        }
+        if (r.ciclo() != null) {
+            res.setCiclo(r.ciclo().shortValue());
+        }
+        auditoria.registrar(sesion.obtener().id(), "PERFIL_ACTUALIZADO", "residente", res.getId(), null);
+        return aResponse(res);
     }
 
     /** Residente asociado a la sesión; falla si el usuario autenticado no es un residente. */
@@ -232,6 +259,6 @@ public class ResidenteService {
         var usuario = usuarios.findById(r.getUsuarioId()).orElseThrow();
         HabitacionResumen hab = asignaciones.findByResidenteIdAndHastaIsNull(r.getId())
                 .flatMap(a -> habitaciones.findById(a.getHabitacionId()).map(h -> new HabitacionResumen(h.getId(), h.getNumero(), a.getCama()))).orElse(null);
-        return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), r.getTelefono(), r.isActivo(), hab, r.isPuedeSolicitarSolo());
+        return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), r.getTelefono(), r.isActivo(), hab, r.isPuedeSolicitarSolo(), r.getEmail(), r.getCarrera(), r.getCiclo() == null ? null : r.getCiclo().intValue());
     }
 }

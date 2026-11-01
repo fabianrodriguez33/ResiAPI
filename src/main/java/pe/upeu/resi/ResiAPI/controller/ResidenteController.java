@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.ApoderadoRequest;
+import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.PerfilRequest;
 import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.AsignacionRequest;
 import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.HabitacionRequest;
 import pe.upeu.resi.ResiAPI.dto.request.ResidenteDtos.ResidenteActualizarRequest;
@@ -73,6 +74,12 @@ public class ResidenteController {
     @PreAuthorize("hasRole('RESIDENTE')")
     public ResidenteResponse yo() {
         return residentes.yo();
+    }
+
+    @PatchMapping("/residentes/yo")
+    @PreAuthorize("hasRole('RESIDENTE')")
+    public ResidenteResponse actualizarMiPerfil(@Valid @RequestBody PerfilRequest request) {
+        return residentes.actualizarPerfil(request);
     }
 
     @GetMapping("/residentes/yo/qr")

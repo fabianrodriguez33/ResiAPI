@@ -24,7 +24,7 @@ public interface SolicitudPermisoRepository extends JpaRepository<SolicitudPermi
 
     long countByResidenteIdInAndEstado(java.util.Collection<Long> residenteIds, EstadoSolicitud estado);
 
-    Page<SolicitudPermiso> findByEstadoOrderByCreadoEnAsc(EstadoSolicitud estado, Pageable pageable);
+    Page<SolicitudPermiso> findByEstadoOrderByCreadoEnDesc(EstadoSolicitud estado, Pageable pageable);
 
     Page<SolicitudPermiso> findAllByOrderByCreadoEnDesc(Pageable pageable);
 

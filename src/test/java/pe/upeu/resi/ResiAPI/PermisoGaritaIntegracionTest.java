@@ -54,8 +54,7 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         String token = leer(mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/enlace-apoderado"), e.preceptor()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("token").asString();
         mvc.perform(post("/api/v1/publico/apoderado/" + token).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}")).andExpect(status().isOk());
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), e.preceptor()).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"aprobar\":true}")).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("APROBADO"));
         return id;
     }
 
@@ -85,19 +84,18 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
     // ------------------------------------------------------------------ flujo completo
 
     @Test
-    void flujoCompletoSolicitudApoderadoPreceptorYGarita() throws Exception {
+    void flujoCompletoSolicitudApoderadoYGarita() throws Exception {
         var e = escenario();
         Instant t0 = base();
         Instant salida = t0.plus(Duration.ofHours(2)), retorno = t0.plus(Duration.ofHours(4));
         long id = crearSolicitud(e, salida, retorno);
 
-        // El preceptor no puede decidir antes que el apoderado
+        // Mientras el apoderado no responde, el permiso no autoriza nada; el pastor ya no tiene cómo aprobarlo.
+        assertEquals("SIN_PERMISO", verificar(e, e.qr()), "un permiso pendiente no autoriza la salida");
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), e.preceptor()).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"aprobar\":true}")).andExpect(status().isConflict());
-        // El residente no puede generar el enlace ni decidir
+                .content("{\"aprobar\":true}")).andExpect(status().is4xxClientError());
+        // El residente no puede generar el enlace
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/enlace-apoderado"), e.residente())).andExpect(status().isForbidden());
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), e.residente()).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"aprobar\":true}")).andExpect(status().isForbidden());
 
         String token = leer(mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/enlace-apoderado"), e.preceptor()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("token").asString();
@@ -109,12 +107,10 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         mvc.perform(get("/api/v1/publico/apoderado/" + token)).andExpect(status().isConflict());
         mvc.perform(get("/api/v1/publico/apoderado/token-inventado")).andExpect(status().isNotFound());
 
-        // Con el visto bueno del apoderado, pasa a revisión institucional
-        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"));
-        assertEquals("SIN_PERMISO", verificar(e, e.qr()), "un permiso pendiente no autoriza la salida");
-
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), e.preceptor()).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"aprobar\":true,\"comentario\":\"Conforme\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
+        // Con el visto bueno del apoderado queda aprobado y el pastor lo ve en su lista.
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("APROBADO"));
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes").param("estado", "APROBADO"), e.preceptor())).andExpect(status().isOk());
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.preceptor())).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
 
         // Antes de la hora de salida
         assertEquals("PERMISO_AUN_NO_VIGENTE", verificar(e, e.qr()));
@@ -138,7 +134,7 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         assertEquals("SIN_PERMISO", verificar(e, e.qr()));
         mvc.perform(conToken(get("/api/v1/residentes/yo/movimientos"), e.residente())).andExpect(status().isOk()).andExpect(jsonPath("$.totalElementos").value(2));
         String auditoria = mvc.perform(conToken(get("/api/v1/auditoria?tamanio=200"), e.admin())).andReturn().getResponse().getContentAsString();
-        assertTrue(auditoria.contains("MOVIMIENTO_SALIDA") && auditoria.contains("PERMISO_APROBADO"));
+        assertTrue(auditoria.contains("MOVIMIENTO_SALIDA"));
     }
 
     @Test
@@ -146,7 +142,7 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         var e = escenario();
         base();
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes/1/decision"), e.garita()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().is4xxClientError());
         assertEquals(403, mvc.perform(conToken(post("/api/v1/garita/movimientos"), e.residente()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"qr\":\"" + e.qr() + "\",\"tipo\":\"SALIDA\"}")).andReturn().getResponse().getStatus());
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes"), e.garita())).andExpect(status().isForbidden());
@@ -280,8 +276,6 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         reloj.fijar(t0.plus(Duration.ofHours(1)).plusSeconds(1));
         assertTrue(permisoService.vencerPendientes() >= 1);
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("VENCIDO"));
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), e.preceptor()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
-                .andExpect(status().isConflict());
     }
 
     // ------------------------------------------------------------------ ampliación y justificación

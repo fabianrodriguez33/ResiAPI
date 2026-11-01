@@ -163,7 +163,12 @@ public class PermisoService {
             s.setResponsableCelular(r.responsableCelular().trim());
             s.setAcompanante(r.acompanante() == null || r.acompanante().isBlank() ? "Nadie" : r.acompanante().trim());
         }
-        s.setEstado(requiereApoderado ? EstadoSolicitud.PENDIENTE_APODERADO : EstadoSolicitud.PENDIENTE_PRECEPTOR);
+        s.setEstado(requiereApoderado ? EstadoSolicitud.PENDIENTE_APODERADO : EstadoSolicitud.APROBADO);
+        if (!requiereApoderado) {
+            // Lo envía el padre/madre, o el residente con el privilegio firmado: no hay nadie más que lo apruebe.
+            s.setDecididoPor(sesion.obtener().id());
+            s.setDecididoEn(ahora);
+        }
         s.setCreadoEn(ahora);
         s.setActualizadoEn(ahora);
         s = solicitudes.save(s);
@@ -251,7 +256,7 @@ public class PermisoService {
         if (s.getEstado() != EstadoSolicitud.PENDIENTE_APODERADO) {
             throw new Excepciones.Conflicto("Esta solicitud ya no está pendiente de tu decisión");
         }
-        cambiarEstado(s, aprobar ? EstadoSolicitud.PENDIENTE_PRECEPTOR : EstadoSolicitud.RECHAZADO);
+        resolverPorFamilia(s, aprobar, sesion.obtener().id());
         auditoria.registrar(sesion.obtener().id(), aprobar ? "APODERADO_APROBO" : "APODERADO_RECHAZO", "solicitud_permiso", id, null);
         return aResponse(s, false);
     }
@@ -288,7 +293,7 @@ public class PermisoService {
 
     @Transactional(readOnly = true)
     public PaginaResponse<SolicitudResponse> listar(EstadoSolicitud estado, Pageable pageable) {
-        var pagina = estado == null ? solicitudes.findAllByOrderByCreadoEnDesc(pageable) : solicitudes.findByEstadoOrderByCreadoEnAsc(estado, pageable);
+        var pagina = estado == null ? solicitudes.findAllByOrderByCreadoEnDesc(pageable) : solicitudes.findByEstadoOrderByCreadoEnDesc(estado, pageable);
         return PaginaResponse.de(pagina, s -> aResponse(s, false));
     }
 
@@ -316,26 +321,19 @@ public class PermisoService {
         return aResponse(s, false);
     }
 
-    // ------------------------------------------------------------------ decisión del preceptor
-
-    @Transactional
-    public SolicitudResponse decidir(Long id, DecisionRequest d) {
-        var s = solicitudes.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Solicitud no encontrada"));
-        if (s.getEstado() != EstadoSolicitud.PENDIENTE_PRECEPTOR) {
-            throw new Excepciones.Conflicto("La solicitud no está pendiente de revisión del preceptor (estado: " + s.getEstado() + ")");
-        }
+    /**
+     * La aceptación del padre/madre (o del apoderado con enlace) deja el permiso aprobado: el pastor solo consulta la lista.
+     * No se aprueba un permiso cuya hora de salida ya pasó.
+     */
+    private void resolverPorFamilia(SolicitudPermiso s, boolean aprobar, Long usuarioId) {
         Instant ahora = reloj.instant();
-        if (!s.getSalidaSolicitada().isAfter(ahora) && d.aprobar()) {
-            cambiarEstado(s, EstadoSolicitud.VENCIDO);
-            throw new Excepciones.Conflicto("La solicitud venció: la hora de salida solicitada ya pasó");
+        if (aprobar && !s.getSalidaSolicitada().isAfter(ahora)) {
+            throw new Excepciones.Conflicto("El permiso venció: la hora de salida solicitada ya pasó");
         }
-        s.setEstado(d.aprobar() ? EstadoSolicitud.APROBADO : EstadoSolicitud.RECHAZADO);
-        s.setDecididoPor(sesion.obtener().id());
+        s.setEstado(aprobar ? EstadoSolicitud.APROBADO : EstadoSolicitud.RECHAZADO);
+        s.setDecididoPor(usuarioId);
         s.setDecididoEn(ahora);
-        s.setComentarioDecision(d.comentario());
         s.setActualizadoEn(ahora);
-        auditoria.registrar(s.getDecididoPor(), d.aprobar() ? "PERMISO_APROBADO" : "PERMISO_RECHAZADO", "solicitud_permiso", id, d.comentario());
-        return aResponse(s, false);
     }
 
     // ------------------------------------------------------------------ apoderado
@@ -395,8 +393,7 @@ public class PermisoService {
         Instant ahora = reloj.instant();
         a.setUsadoEn(ahora);
         a.setDecision(aprobar ? DecisionApoderado.APROBADO : DecisionApoderado.RECHAZADO);
-        // La aprobación del apoderado no reemplaza la autorización institucional: pasa a revisión del preceptor.
-        cambiarEstado(s, aprobar ? EstadoSolicitud.PENDIENTE_PRECEPTOR : EstadoSolicitud.RECHAZADO);
+        resolverPorFamilia(s, aprobar, null);
         auditoria.registrar(null, aprobar ? "APODERADO_APROBO" : "APODERADO_RECHAZO", "solicitud_permiso", s.getId(), "apoderado=" + a.getApoderadoId());
     }
 

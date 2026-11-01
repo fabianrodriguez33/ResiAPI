@@ -97,12 +97,17 @@ public abstract class PruebaIntegracion {
         String user = "res_" + sufijo();
         var res = mvc.perform(conToken(MockMvcRequestBuilders.post("/api/v1/residentes"), tokenAdmin).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"" + user + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Residente " + user
-                        + "\",\"codigo\":\"" + user + "\"}")).andReturn().getResponse();
+                        + "\",\"codigo\":\"" + codigoUniversitario() + "\"}")).andReturn().getResponse();
         if (res.getStatus() != 201) {
             throw new IllegalStateException("No se pudo crear el residente: " + res.getStatus());
         }
         ultimoUsuario = user;
         return leer(res.getContentAsString()).get("id").asLong();
+    }
+
+    /** Código de 9 dígitos al azar (como 202410354); la base de pruebas se reutiliza, por eso no es secuencial. */
+    protected String codigoUniversitario() {
+        return String.valueOf(100_000_000 + java.util.concurrent.ThreadLocalRandom.current().nextInt(900_000_000));
     }
 
     protected String ultimoUsuario;

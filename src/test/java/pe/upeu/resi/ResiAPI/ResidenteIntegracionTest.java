@@ -153,7 +153,7 @@ class ResidenteIntegracionTest extends PruebaIntegracion {
         crearResidente(admin);
         String user = ultimoUsuario;
         String token = tokenDe(user);
-        mvc.perform(conToken(get("/api/v1/residentes/yo"), token)).andExpect(status().isOk()).andExpect(jsonPath("$.codigo").value(user));
+        mvc.perform(conToken(get("/api/v1/residentes/yo"), token)).andExpect(status().isOk()).andExpect(jsonPath("$.codigo").value(org.hamcrest.Matchers.matchesPattern("[0-9]{9}"))).andExpect(jsonPath("$.nombreCompleto").exists());
         mvc.perform(conToken(get("/api/v1/residentes"), token)).andExpect(status().isForbidden());
         mvc.perform(conToken(get("/api/v1/auditoria"), token)).andExpect(status().isForbidden());
     }

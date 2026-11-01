@@ -29,6 +29,15 @@ public class Residente {
     @Column(name = "puede_solicitar_solo")
     private boolean puedeSolicitarSolo;
 
+    @Column(name = "email")
+    private String email;
+
+    @Column(name = "carrera")
+    private String carrera;
+
+    @Column(name = "ciclo")
+    private Short ciclo;
+
     @Column(name = "activo")
     private boolean activo;
 

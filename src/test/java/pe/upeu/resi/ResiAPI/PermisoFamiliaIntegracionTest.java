@@ -55,16 +55,18 @@ class PermisoFamiliaIntegracionTest extends PruebaIntegracion {
     }
 
     @Test
-    void sinPrivilegioElPermisoPasaPorElPadreYLuegoPorElPastor() throws Exception {
+    void sinPrivilegioElPermisoPasaPorElPadreYQuedaAprobado() throws Exception {
         var f = familia(false);
         Instant t0 = ahora();
         long id = solicitar(f.residente(), cuerpo("LARGO", t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(5)), ""), "/api/v1/permisos/solicitudes", 201);
 
-        // Queda esperando al padre; el pastor todavía no lo puede aprobar.
+        // Queda esperando al padre; el pastor lo ve en la lista pero no tiene cómo aprobarlo.
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), f.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_APODERADO"))
                 .andExpect(jsonPath("$.origen").value("RESIDENTE"));
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes").param("estado", "PENDIENTE_APODERADO"), f.preceptor())).andExpect(status().isOk());
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), f.preceptor())).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("PENDIENTE_APODERADO"));
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), f.preceptor()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
-                .andExpect(status().isConflict());
+                .andExpect(status().is4xxClientError());
 
         // El padre lo ve en su perfil (con el hijo y el pendiente) y lo acepta.
         mvc.perform(conToken(get("/api/v1/familia/hijos"), f.padre())).andExpect(status().isOk())
@@ -74,32 +76,32 @@ class PermisoFamiliaIntegracionTest extends PruebaIntegracion {
                 .andReturn().getResponse().getContentAsString());
         assertEquals(1, lista.get("contenido").size());
         mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + id + "/decision"), f.padre()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
         // No se puede decidir dos veces.
         mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + id + "/decision"), f.padre()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":false}"))
                 .andExpect(status().isConflict());
-
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), f.preceptor()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
+        // El pastor la ve en su lista de aprobados, lista para garita.
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes").param("estado", "APROBADO"), f.preceptor())).andExpect(status().isOk());
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), f.preceptor())).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
     }
 
     @Test
-    void siElPadreRechazaNuncaLlegaAlPastor() throws Exception {
+    void siElPadreRechazaElPermisoQuedaRechazadoYNoHayVueltaAtras() throws Exception {
         var f = familia(false);
         Instant t0 = ahora();
         long id = solicitar(f.residente(), cuerpo("CORTO", t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(3)), ""), "/api/v1/permisos/solicitudes", 201);
         mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + id + "/decision"), f.padre()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":false}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("RECHAZADO"));
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), f.preceptor()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
+        mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + id + "/decision"), f.padre()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
                 .andExpect(status().isConflict());
     }
 
     @Test
-    void conPrivilegioElResidentePideCortoYLargoDirectoAlPastorPeroNoPernoctar() throws Exception {
+    void conPrivilegioElResidentePideCortoYLargoSinPasarPorElPadrePeroNoPernoctar() throws Exception {
         var f = familia(true);
         Instant t0 = ahora();
         long corto = solicitar(f.residente(), cuerpo("CORTO", t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(4)), ""), "/api/v1/permisos/solicitudes", 201);
-        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + corto), f.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"))
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + corto), f.residente())).andExpect(jsonPath("$.estado").value("APROBADO"))
                 .andExpect(jsonPath("$.requiereApoderado").value(false));
         solicitar(f.residente(), cuerpo("LARGO", t0.plus(Duration.ofHours(6)), t0.plus(Duration.ofHours(9)), ""), "/api/v1/permisos/solicitudes", 201);
         // Pernoctar fuera siempre lo envía el padre, aunque el residente tenga el privilegio.
@@ -125,13 +127,11 @@ class PermisoFamiliaIntegracionTest extends PruebaIntegracion {
         String casa = ",\"residenteId\":" + f.residenteId() + ",\"responsableNombre\":\"Haydee Bazán Abanto\",\"responsableCelular\":\"+51 968 110 422\",\"acompanante\":\"\"";
 
         long id = solicitar(f.padre(), cuerpo("PERNOCTE", salida, retorno, casa), "/api/v1/familia/solicitudes", 201);
-        // Lo envía el padre: va directo al pastor, con los datos de la casa y «Nadie» como acompañante por omisión.
-        mvc.perform(conToken(get("/api/v1/familia/solicitudes/" + id), f.padre())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"))
+        // Lo envía el padre: queda aprobado, con los datos de la casa y «Nadie» como acompañante por omisión.
+        mvc.perform(conToken(get("/api/v1/familia/solicitudes/" + id), f.padre())).andExpect(jsonPath("$.estado").value("APROBADO"))
                 .andExpect(jsonPath("$.origen").value("APODERADO")).andExpect(jsonPath("$.tipo").value("PERNOCTE"))
                 .andExpect(jsonPath("$.responsableNombre").value("Haydee Bazán Abanto")).andExpect(jsonPath("$.responsableCelular").value("+51 968 110 422"))
                 .andExpect(jsonPath("$.acompanante").value("Nadie"));
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/decision"), f.preceptor()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
     }
 
     @Test
@@ -207,5 +207,28 @@ class PermisoFamiliaIntegracionTest extends PruebaIntegracion {
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), f.padre()).contentType(MediaType.APPLICATION_JSON)
                 .content(cuerpo("LARGO", t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(5)), ""))).andExpect(status().isForbidden());
         assertTrue(true);
+    }
+
+    @Test
+    void elPadreNoPuedeAceptarUnPermisoCuyaSalidaYaPaso() throws Exception {
+        var f = familia(false);
+        Instant t0 = ahora();
+        long id = solicitar(f.residente(), cuerpo("LARGO", t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(6)), ""), "/api/v1/permisos/solicitudes", 201);
+        reloj.fijar(t0.plus(Duration.ofHours(3)));
+        mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + id + "/decision"), f.padre()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
+                .andExpect(status().isConflict());
+        // Rechazarlo sí es posible.
+        mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + id + "/decision"), f.padre()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("RECHAZADO"));
+    }
+
+    @Test
+    void elPastorVeLaListaPeroResidentesYPadresNoLaConsultan() throws Exception {
+        var f = familia(true);
+        Instant t0 = ahora();
+        solicitar(f.residente(), cuerpo("CORTO", t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(3)), ""), "/api/v1/permisos/solicitudes", 201);
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes"), f.preceptor())).andExpect(status().isOk());
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes"), f.residente())).andExpect(status().isForbidden());
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes"), f.padre())).andExpect(status().isForbidden());
     }
 }
