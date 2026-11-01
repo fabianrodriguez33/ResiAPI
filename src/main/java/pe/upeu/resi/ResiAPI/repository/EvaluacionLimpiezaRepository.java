@@ -10,5 +10,9 @@ public interface EvaluacionLimpiezaRepository extends JpaRepository<EvaluacionLi
 
     boolean existsByResidenteIdAndFecha(Long residenteId, LocalDate fecha);
 
+    java.util.List<EvaluacionLimpieza> findByResidenteIdInAndFecha(java.util.Collection<Long> residenteIds, LocalDate fecha);
+
+    java.util.List<EvaluacionLimpieza> findByHabitacionIdAndFecha(Long habitacionId, LocalDate fecha);
+
     Page<EvaluacionLimpieza> findByResidenteIdOrderByFechaDesc(Long residenteId, Pageable pageable);
 }

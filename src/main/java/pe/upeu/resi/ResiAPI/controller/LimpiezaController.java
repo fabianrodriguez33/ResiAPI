@@ -12,7 +12,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import pe.upeu.resi.ResiAPI.dto.request.LimpiezaHabitacionRequest;
 import pe.upeu.resi.ResiAPI.dto.request.LimpiezaRequest;
+import pe.upeu.resi.ResiAPI.dto.response.LimpiezaResponses.HabitacionLimpiezaResponse;
 import pe.upeu.resi.ResiAPI.dto.response.LimpiezaResponses.EvaluacionResponse;
 import pe.upeu.resi.ResiAPI.dto.response.LimpiezaResponses.ResumenLimpiezaResponse;
 import pe.upeu.resi.ResiAPI.dto.response.PaginaResponse;
@@ -30,6 +32,20 @@ public class LimpiezaController {
     @ResponseStatus(HttpStatus.CREATED)
     public EvaluacionResponse registrar(@Valid @RequestBody LimpiezaRequest request) {
         return limpieza.registrar(request);
+    }
+
+    @GetMapping("/limpieza/habitaciones")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.List<HabitacionLimpiezaResponse> habitaciones(@RequestParam(required = false) java.time.LocalDate fecha) {
+        return limpieza.habitaciones(fecha);
+    }
+
+    @PostMapping("/limpieza/habitaciones/{id}/evaluaciones")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public java.util.List<EvaluacionResponse> registrarHabitacion(@org.springframework.web.bind.annotation.PathVariable Long id,
+                                                                  @Valid @RequestBody LimpiezaHabitacionRequest request) {
+        return limpieza.registrarHabitacion(id, request);
     }
 
     @GetMapping("/limpieza/evaluaciones")

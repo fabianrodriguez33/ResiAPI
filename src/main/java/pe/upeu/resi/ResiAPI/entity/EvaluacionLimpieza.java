@@ -24,6 +24,9 @@ public class EvaluacionLimpieza {
     @Column(name = "fecha")
     private LocalDate fecha;
 
+    @Column(name = "habitacion_id")
+    private Long habitacionId;
+
     @Column(name = "evaluador_id")
     private Long evaluadorId;
 

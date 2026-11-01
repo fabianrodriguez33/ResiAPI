@@ -14,6 +14,13 @@ public final class LimpiezaResponses {
                                      String observacion, Long evaluadorId, Instant creadoEn) {
     }
 
+    public record ResidenteLimpieza(Long residenteId, String codigo, String nombreCompleto, String cama, boolean evaluado) {
+    }
+
+    /** Habitación con sus ocupantes y si ya fueron evaluados en la fecha consultada. */
+    public record HabitacionLimpiezaResponse(Long habitacionId, String numero, int capacidad, java.util.List<ResidenteLimpieza> residentes, long evaluados) {
+    }
+
     /** Promedio sobre 20 puntos; null si todavía no hay evaluaciones. */
     public record ResumenLimpiezaResponse(long evaluaciones, Double promedio, Integer ultimoTotal, LocalDate ultimaFecha) {
     }
