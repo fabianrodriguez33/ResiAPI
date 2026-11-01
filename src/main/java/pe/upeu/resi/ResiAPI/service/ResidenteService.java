@@ -45,6 +45,7 @@ public class ResidenteService {
     private final AuditoriaService auditoria;
     private final SesionActual sesion;
     private final Clock reloj;
+    private final PerfilService perfil;
 
     @Transactional
     public ResidenteResponse crear(ResidenteRequest r) {
@@ -54,9 +55,12 @@ public class ResidenteService {
         }
         var usuario = usuarioService.crear(r.username(), r.password(), r.nombreCompleto(), Rol.RESIDENTE);
         var res = new Residente();
+        usuarioService.asignarIdentidad(usuario, r.dni(), r.fechaNacimiento());
+        if (r.telefono() != null && !r.telefono().isBlank()) {
+            usuario.setTelefono(r.telefono().trim());
+        }
         res.setUsuarioId(usuario.getId());
         res.setCodigo(codigo);
-        res.setTelefono(r.telefono());
         res.setActivo(true);
         res.setCreadoEn(reloj.instant());
         res = residentes.save(res);
@@ -80,22 +84,11 @@ public class ResidenteService {
         return aResponse(residenteActual());
     }
 
-    /** El residente edita sus propios datos de contacto y académicos. El nombre completo lo gestiona la administración. */
+    /** El residente edita sus datos de contacto y académicos. El nombre, el DNI y el código universitario los gestiona la administración. */
     @Transactional
     public ResidenteResponse actualizarPerfil(PerfilRequest r) {
         var res = residentes.findByIdForUpdate(residenteActual().getId()).orElseThrow();
-        if (r.codigo() != null && !r.codigo().equals(res.getCodigo())) {
-            if (residentes.existsByCodigo(r.codigo())) {
-                throw new Excepciones.Conflicto("Ya existe un residente con el código " + r.codigo());
-            }
-            res.setCodigo(r.codigo());
-        }
-        if (r.email() != null) {
-            res.setEmail(r.email().isBlank() ? null : r.email().trim());
-        }
-        if (r.telefono() != null) {
-            res.setTelefono(r.telefono().isBlank() ? null : r.telefono().trim());
-        }
+        perfil.actualizarContacto(usuarios.findById(res.getUsuarioId()).orElseThrow(), r.email(), r.telefono(), r.fechaNacimiento());
         if (r.carrera() != null) {
             res.setCarrera(r.carrera().isBlank() ? null : r.carrera().trim());
         }
@@ -124,8 +117,16 @@ public class ResidenteService {
             usuario.setNombreCompleto(r.nombreCompleto().trim());
         }
         if (r.telefono() != null) {
-            res.setTelefono(r.telefono());
+            usuario.setTelefono(r.telefono().isBlank() ? null : r.telefono().trim());
         }
+        if (r.codigo() != null && !r.codigo().equals(res.getCodigo())) {
+            if (residentes.existsByCodigo(r.codigo())) {
+                throw new Excepciones.Conflicto("Ya existe un residente con el código " + r.codigo());
+            }
+            res.setCodigo(r.codigo());
+            auditoria.registrar(sesion.obtener().id(), "RESIDENTE_CODIGO_CAMBIADO", "residente", id, null);
+        }
+        usuarioService.asignarIdentidad(usuario, r.dni(), r.fechaNacimiento());
         if (r.puedeSolicitarSolo() != null && r.puedeSolicitarSolo() != res.isPuedeSolicitarSolo()) {
             res.setPuedeSolicitarSolo(r.puedeSolicitarSolo());
             auditoria.registrar(sesion.obtener().id(), r.puedeSolicitarSolo() ? "PRIVILEGIO_PERMISOS_OTORGADO" : "PRIVILEGIO_PERMISOS_RETIRADO", "residente", id, null);
@@ -259,6 +260,7 @@ public class ResidenteService {
         var usuario = usuarios.findById(r.getUsuarioId()).orElseThrow();
         HabitacionResumen hab = asignaciones.findByResidenteIdAndHastaIsNull(r.getId())
                 .flatMap(a -> habitaciones.findById(a.getHabitacionId()).map(h -> new HabitacionResumen(h.getId(), h.getNumero(), a.getCama()))).orElse(null);
-        return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), r.getTelefono(), r.isActivo(), hab, r.isPuedeSolicitarSolo(), r.getEmail(), r.getCarrera(), r.getCiclo() == null ? null : r.getCiclo().intValue());
+        return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), usuario.getTelefono(), r.isActivo(), hab, r.isPuedeSolicitarSolo(), usuario.getEmail(), r.getCarrera(),
+                r.getCiclo() == null ? null : r.getCiclo().intValue(), usuario.getDni(), usuario.getFechaNacimiento(), usuario.isEmailVerificado());
     }
 }

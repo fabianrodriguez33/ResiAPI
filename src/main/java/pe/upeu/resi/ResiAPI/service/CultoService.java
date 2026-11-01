@@ -43,6 +43,7 @@ public class CultoService {
     private final Clock reloj;
     private final ZoneId zona;
     private final ResidenteService residenteService;
+    private final CalendarioService calendario;
 
     /** Abre (o devuelve, si ya existe) la sesión de culto de hoy. Horarios y cortes salen de la configuración. */
     @Transactional
@@ -50,6 +51,10 @@ public class CultoService {
         LocalDate hoy = reloj.instant().atZone(zona).toLocalDate();
         if (!DIAS_DE_CULTO.contains(hoy.getDayOfWeek())) {
             throw new Excepciones.Conflicto("Los cultos se registran de lunes a viernes");
+        }
+        String sinCulto = calendario.motivoSinCulto(hoy);
+        if (sinCulto != null) {
+            throw new Excepciones.Conflicto("Hoy no hay cultos: " + sinCulto);
         }
         var existente = sesiones.findByFechaAndTipo(hoy, tipo);
         if (existente.isPresent()) {

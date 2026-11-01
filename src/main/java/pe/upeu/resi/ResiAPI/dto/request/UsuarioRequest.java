@@ -2,6 +2,7 @@ package pe.upeu.resi.ResiAPI.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import pe.upeu.resi.ResiAPI.enums.Rol;
@@ -12,5 +13,7 @@ public record UsuarioRequest(
         @NotBlank(message = "La contraseña es obligatoria")
         @Size(min = 8, max = 72, message = "La contraseña debe tener entre 8 y 72 caracteres") String password,
         @NotBlank(message = "El nombre es obligatorio") @Size(max = 150) String nombreCompleto,
-        @NotNull(message = "El rol es obligatorio") Rol rol) {
+        @NotNull(message = "El rol es obligatorio") Rol rol,
+        @Pattern(regexp = "\\d{8}", message = "El DNI tiene 8 dígitos") String dni,
+        @Past(message = "La fecha de nacimiento debe ser anterior a hoy") java.time.LocalDate fechaNacimiento) {
 }

@@ -40,6 +40,9 @@ public final class PermisoDtos {
             Long evidenciaId) {
     }
 
+    public record AnulacionRequest(@NotBlank(message = "Escribe el motivo de la anulación") @Size(max = 300, message = "Máximo 300 caracteres") String motivo) {
+    }
+
     public record DecisionApoderadoRequest(@NotNull(message = "Indique si se aprueba o se rechaza") Boolean aprobar) {
     }
 }

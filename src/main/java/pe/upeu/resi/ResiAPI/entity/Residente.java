@@ -23,14 +23,8 @@ public class Residente {
     @Column(name = "codigo")
     private String codigo;
 
-    @Column(name = "telefono")
-    private String telefono;
-
     @Column(name = "puede_solicitar_solo")
     private boolean puedeSolicitarSolo;
-
-    @Column(name = "email")
-    private String email;
 
     @Column(name = "carrera")
     private String carrera;

@@ -12,5 +12,11 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
     boolean existsByUsername(String username);
 
+    boolean existsByDniAndIdNot(String dni, Long id);
+
+    boolean existsByDni(String dni);
+
+    boolean existsByEmailIgnoreCaseAndEmailVerificadoTrueAndIdNot(String email, Long id);
+
     Page<Usuario> findAllByOrderByNombreCompletoAsc(Pageable pageable);
 }

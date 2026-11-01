@@ -322,6 +322,27 @@ public class PermisoService {
     }
 
     /**
+     * El pastor anula un permiso aprobado que todavía no se usó: desde ese momento garita ya no deja salir con él.
+     * Si el residente ya salió no se anula; su retorno se registra normalmente.
+     */
+    @Transactional
+    public SolicitudResponse anular(Long id, String motivo) {
+        var s = solicitudes.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Solicitud no encontrada"));
+        if (s.getEstado() != EstadoSolicitud.APROBADO) {
+            throw new Excepciones.Conflicto("Solo se puede anular un permiso aprobado");
+        }
+        if (movimientos.existsBySolicitudIdAndTipoAndAnuladoFalse(id, TipoMovimiento.SALIDA)) {
+            throw new Excepciones.Conflicto("El residente ya salió con este permiso");
+        }
+        cambiarEstado(s, EstadoSolicitud.ANULADO);
+        s.setComentarioDecision(motivo.trim());
+        s.setDecididoPor(sesion.obtener().id());
+        s.setDecididoEn(reloj.instant());
+        auditoria.registrar(sesion.obtener().id(), "PERMISO_ANULADO", "solicitud_permiso", id, motivo.trim());
+        return aResponse(s, true);
+    }
+
+    /**
      * La aceptación del padre/madre (o del apoderado con enlace) deja el permiso aprobado: el pastor solo consulta la lista.
      * No se aprueba un permiso cuya hora de salida ya pasó.
      */

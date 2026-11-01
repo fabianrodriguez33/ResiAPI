@@ -31,6 +31,21 @@ public class Usuario {
     @Column(name = "rol")
     private Rol rol;
 
+    @Column(name = "dni")
+    private String dni;
+
+    @Column(name = "fecha_nacimiento")
+    private java.time.LocalDate fechaNacimiento;
+
+    @Column(name = "email")
+    private String email;
+
+    @Column(name = "email_verificado")
+    private boolean emailVerificado;
+
+    @Column(name = "telefono")
+    private String telefono;
+
     @Column(name = "activo")
     private boolean activo;
 

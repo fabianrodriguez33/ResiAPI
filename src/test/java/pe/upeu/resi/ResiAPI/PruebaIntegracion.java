@@ -18,7 +18,7 @@ import pe.upeu.resi.ResiAPI.service.UsuarioService;
 /** Base de las pruebas de integración: PostgreSQL real, MockMvc y utilidades para crear usuarios y tokens. */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(RelojPrueba.Configuracion.class)
+@Import({RelojPrueba.Configuracion.class, CorreoPrueba.Configuracion.class})
 public abstract class PruebaIntegracion {
 
     protected static final String CLAVE = "Clave-de-prueba-123";
@@ -31,6 +31,8 @@ public abstract class PruebaIntegracion {
     protected UsuarioService usuarioService;
     @Autowired
     protected RelojPrueba reloj;
+    @Autowired
+    protected CorreoPrueba correo;
 
     @AfterEach
     void liberarReloj() {
@@ -97,7 +99,7 @@ public abstract class PruebaIntegracion {
         String user = "res_" + sufijo();
         var res = mvc.perform(conToken(MockMvcRequestBuilders.post("/api/v1/residentes"), tokenAdmin).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"" + user + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Residente " + user
-                        + "\",\"codigo\":\"" + codigoUniversitario() + "\"}")).andReturn().getResponse();
+                        + "\",\"codigo\":\"" + codigoUniversitario() + "\",\"dni\":\"" + dniAleatorio() + "\"}")).andReturn().getResponse();
         if (res.getStatus() != 201) {
             throw new IllegalStateException("No se pudo crear el residente: " + res.getStatus());
         }
@@ -108,6 +110,11 @@ public abstract class PruebaIntegracion {
     /** Código de 9 dígitos al azar (como 202410354); la base de pruebas se reutiliza, por eso no es secuencial. */
     protected String codigoUniversitario() {
         return String.valueOf(100_000_000 + java.util.concurrent.ThreadLocalRandom.current().nextInt(900_000_000));
+    }
+
+    /** DNI de 8 dígitos al azar; es único en la base. */
+    protected String dniAleatorio() {
+        return String.valueOf(10_000_000 + java.util.concurrent.ThreadLocalRandom.current().nextInt(90_000_000));
     }
 
     protected String ultimoUsuario;

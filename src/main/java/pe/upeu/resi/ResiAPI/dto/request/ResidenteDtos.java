@@ -29,22 +29,28 @@ public final class ResidenteDtos {
             @NotBlank(message = "El nombre es obligatorio") @Size(max = 150) String nombreCompleto,
             @NotBlank(message = "El código universitario es obligatorio")
             @Pattern(regexp = "\\d{9}", message = "El código universitario tiene 9 dígitos (ej. 202410354)") String codigo,
+            @NotBlank(message = "El DNI es obligatorio") @Pattern(regexp = "\\d{8}", message = "El DNI tiene 8 dígitos") String dni,
+            @jakarta.validation.constraints.Past(message = "La fecha de nacimiento debe ser anterior a hoy") java.time.LocalDate fechaNacimiento,
             @Size(max = 20) String telefono) {
     }
 
     /**
      * Datos que el propio residente puede editar. {@code null} = no cambia; una cadena vacía borra el dato (correo, teléfono, carrera).
+     * El código universitario y el DNI los cambia solo la administración.
      */
     public record PerfilRequest(
             @Email(message = "Correo inválido") @Size(max = 150) String email,
             @Size(max = 20) String telefono,
-            @Pattern(regexp = "\\d{9}", message = "El código universitario tiene 9 dígitos (ej. 202410354)") String codigo,
+            @jakarta.validation.constraints.Past(message = "La fecha de nacimiento debe ser anterior a hoy") java.time.LocalDate fechaNacimiento,
             @Size(max = 100, message = "Máximo 100 caracteres") String carrera,
             @Min(value = 1, message = "El ciclo va de 1 a 14") @Max(value = 14, message = "El ciclo va de 1 a 14") Integer ciclo) {
     }
 
     public record ResidenteActualizarRequest(@Size(max = 150) String nombreCompleto, @Size(max = 20) String telefono, Boolean activo,
-                                             Boolean puedeSolicitarSolo) {
+                                             Boolean puedeSolicitarSolo,
+                                             @Pattern(regexp = "\\d{9}", message = "El código universitario tiene 9 dígitos (ej. 202410354)") String codigo,
+                                             @Pattern(regexp = "\\d{8}", message = "El DNI tiene 8 dígitos") String dni,
+                                             @jakarta.validation.constraints.Past(message = "La fecha de nacimiento debe ser anterior a hoy") java.time.LocalDate fechaNacimiento) {
     }
 
     public record AsignacionRequest(@NotNull(message = "La habitación es obligatoria") Long habitacionId, @Size(max = 1) String cama) {

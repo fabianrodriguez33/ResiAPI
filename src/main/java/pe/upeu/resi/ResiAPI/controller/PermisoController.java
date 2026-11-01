@@ -86,6 +86,12 @@ public class PermisoController {
         return permisos.listar(estado, pagina(pagina, tamanio));
     }
 
+    @PostMapping("/solicitudes/{id}/anular")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public SolicitudResponse anular(@PathVariable Long id, @Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.PermisoDtos.AnulacionRequest request) {
+        return permisos.anular(id, request.motivo());
+    }
+
     @GetMapping("/solicitudes/{id}/resumen-residente")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public pe.upeu.resi.ResiAPI.dto.response.PermisoResponses.ResumenResidenteResponse resumenResidente(@PathVariable Long id) {

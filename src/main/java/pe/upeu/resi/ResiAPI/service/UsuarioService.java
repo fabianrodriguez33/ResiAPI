@@ -26,6 +26,7 @@ public class UsuarioService {
     private final AuditoriaService auditoria;
     private final SesionActual sesion;
     private final Clock reloj;
+    private final PerfilService perfil;
 
     @Transactional(readOnly = true)
     public UsuarioResponse actual() {
@@ -38,13 +39,33 @@ public class UsuarioService {
         return PaginaResponse.de(usuarios.findAllByOrderByNombreCompletoAsc(pageable), UsuarioMapper::aResponse);
     }
 
-    /** Crea personal (preceptor, garita, administrador). Los residentes se crean desde /residentes. */
+    /**
+     * Crea personal: pastor (preceptor) o garita. Los residentes se crean desde /residentes, las cuentas de los padres
+     * desde la ficha de cada residente, y el administrador inicial sale de la configuración del servidor.
+     */
     @Transactional
     public UsuarioResponse crearPersonal(UsuarioRequest r) {
-        if (r.rol() == Rol.RESIDENTE) {
-            throw new Excepciones.SolicitudInvalida("Los residentes se registran desde el módulo de residentes");
+        if (r.rol() != Rol.PRECEPTOR && r.rol() != Rol.GARITA) {
+            throw new Excepciones.SolicitudInvalida("Desde aquí solo se crean pastores y personal de garita",
+                    java.util.Map.of("rol", "Elige Pastor (PRECEPTOR) o Garita"));
         }
-        return aResponse(crear(r.username(), r.password(), r.nombreCompleto(), r.rol()));
+        var u = crear(r.username(), r.password(), r.nombreCompleto(), r.rol());
+        asignarIdentidad(u, r.dni(), r.fechaNacimiento());
+        return aResponse(u);
+    }
+
+    /** Fija el DNI (único) y la fecha de nacimiento. Solo lo hace la administración. */
+    public void asignarIdentidad(Usuario u, String dni, java.time.LocalDate nacimiento) {
+        if (dni != null && !dni.equals(u.getDni())) {
+            if (usuarios.existsByDniAndIdNot(dni, u.getId())) {
+                throw new Excepciones.Conflicto("Ya existe una persona con el DNI " + dni);
+            }
+            u.setDni(dni);
+        }
+        if (nacimiento != null) {
+            perfil.validarNacimiento(nacimiento);
+            u.setFechaNacimiento(nacimiento);
+        }
     }
 
     /** Uso interno: crea un usuario validando unicidad y aplicando BCrypt. */
@@ -72,6 +93,7 @@ public class UsuarioService {
         if (r.nombreCompleto() != null && !r.nombreCompleto().isBlank()) {
             u.setNombreCompleto(r.nombreCompleto().trim());
         }
+        asignarIdentidad(u, r.dni(), r.fechaNacimiento());
         if (r.password() != null) {
             u.setPasswordHash(encoder.encode(r.password()));
             auditoria.registrar(actorId(), "USUARIO_CLAVE_CAMBIADA", "usuario", id, null);
