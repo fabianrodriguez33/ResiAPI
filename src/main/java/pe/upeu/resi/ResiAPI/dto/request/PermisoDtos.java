@@ -16,7 +16,13 @@ public final class PermisoDtos {
             @NotBlank(message = "El motivo es obligatorio") @Size(max = 300, message = "Máximo 300 caracteres") String motivo,
             @NotBlank(message = "El destino es obligatorio") @Size(max = 200, message = "Máximo 200 caracteres") String destino,
             @NotNull(message = "La fecha y hora de salida es obligatoria") Instant salida,
-            @NotNull(message = "La fecha y hora de retorno es obligatoria") Instant retorno) {
+            @NotNull(message = "La fecha y hora de retorno es obligatoria") Instant retorno,
+            /** Solo lo envía el apoderado: a qué hijo corresponde el permiso. */
+            Long residenteId,
+            /** Solo para PERNOCTE: quien recibe al residente, su celular y con quién viaja. */
+            @Size(max = 150, message = "Máximo 150 caracteres") String responsableNombre,
+            @Size(max = 30, message = "Máximo 30 caracteres") String responsableCelular,
+            @Size(max = 150, message = "Máximo 150 caracteres") String acompanante) {
     }
 
     public record DecisionRequest(@NotNull(message = "Indique si se aprueba o se rechaza") Boolean aprobar,

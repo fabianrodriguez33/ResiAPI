@@ -18,10 +18,10 @@ public final class ResidenteResponses {
     }
 
     public record ResidenteResponse(Long id, Long usuarioId, String codigo, String nombreCompleto, String telefono, boolean activo,
-                                    HabitacionResumen habitacion) {
+                                    HabitacionResumen habitacion, boolean puedeSolicitarSolo) {
     }
 
-    public record ApoderadoResponse(Long id, String nombre, String telefono, String email, String parentesco, boolean principal) {
+    public record ApoderadoResponse(Long id, String nombre, String telefono, String email, String parentesco, boolean principal, String usuario) {
     }
 
     public record QrResponse(String contenido, Instant generadoEn) {

@@ -22,6 +22,9 @@ public class Apoderado {
     @Column(name = "telefono")
     private String telefono;
 
+    @Column(name = "usuario_id")
+    private Long usuarioId;
+
     @Column(name = "email")
     private String email;
 }

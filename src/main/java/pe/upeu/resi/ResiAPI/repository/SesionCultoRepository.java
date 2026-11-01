@@ -17,6 +17,8 @@ public interface SesionCultoRepository extends JpaRepository<SesionCulto, Long> 
 
     List<SesionCulto> findByFechaOrderByInicioAsc(LocalDate fecha);
 
+    long countByFechaBetween(LocalDate desde, LocalDate hasta);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from SesionCulto s where s.id = :id")
     Optional<SesionCulto> findByIdForUpdate(@Param("id") Long id);

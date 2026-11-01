@@ -57,6 +57,22 @@ public class SolicitudPermiso {
     @Column(name = "comentario_decision")
     private String comentarioDecision;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origen")
+    private pe.upeu.resi.ResiAPI.enums.OrigenSolicitud origen;
+
+    @Column(name = "creado_por")
+    private Long creadoPor;
+
+    @Column(name = "responsable_nombre")
+    private String responsableNombre;
+
+    @Column(name = "responsable_celular")
+    private String responsableCelular;
+
+    @Column(name = "acompanante")
+    private String acompanante;
+
     @Column(name = "creado_en")
     private Instant creadoEn;
 

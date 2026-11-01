@@ -86,6 +86,12 @@ public class PermisoController {
         return permisos.listar(estado, pagina(pagina, tamanio));
     }
 
+    @GetMapping("/solicitudes/{id}/resumen-residente")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public pe.upeu.resi.ResiAPI.dto.response.PermisoResponses.ResumenResidenteResponse resumenResidente(@PathVariable Long id) {
+        return permisos.resumenDelResidente(id);
+    }
+
     @PostMapping("/solicitudes/{id}/decision")
     @PreAuthorize("hasRole('PRECEPTOR')")
     public SolicitudResponse decidir(@PathVariable Long id, @Valid @RequestBody DecisionRequest request) {

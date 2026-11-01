@@ -44,7 +44,7 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
 
     private long crearSolicitud(Escenario e, Instant salida, Instant retorno) throws Exception {
         var res = mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON)
-                .content(cuerpoSolicitud("CORTO", salida, retorno))).andExpect(status().isCreated()).andReturn().getResponse();
+                .content(cuerpoSolicitud("LARGO", salida, retorno))).andExpect(status().isCreated()).andReturn().getResponse();
         return leer(res.getContentAsString()).get("id").asLong();
     }
 
@@ -236,7 +236,7 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
 
         long id = crearSolicitud(e, t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(4)));
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON)
-                .content(cuerpoSolicitud("CORTO", t0.plus(Duration.ofHours(3)), t0.plus(Duration.ofHours(5))))).andExpect(status().isConflict());
+                .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(3)), t0.plus(Duration.ofHours(5))))).andExpect(status().isConflict());
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/cancelar"), e.residente())).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("CANCELADO"));
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/cancelar"), e.residente())).andExpect(status().isConflict());
         // Con la anterior cancelada, ya no hay superposición
@@ -244,20 +244,29 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
     }
 
     @Test
-    void elLimiteDeDuracionEsConfigurableYNoEstaCodificado() throws Exception {
+    void elPermisoCortoDuraComoMaximoDosHorasYLoLargoSeConfigura() throws Exception {
         var e = escenario();
         Instant t0 = base();
-        String cuerpo = cuerpoSolicitud("CORTO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(4))); // 3 horas
-        // Sin configuración confirmada no se impone límite
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isCreated());
+        // Corto: 2 horas exactas sí; 3 horas no (debe pedirse largo).
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpoSolicitud("CORTO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(3))))).andExpect(status().isCreated());
+        var otro = escenario();
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), otro.residente()).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpoSolicitud("CORTO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(4)))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.retorno").exists());
+        // El mismo horario de 3 horas como permiso largo es válido.
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), otro.residente()).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(4))))).andExpect(status().isCreated());
+        // El límite del largo es configurable y no está codificado.
         try {
-            mvc.perform(conToken(put("/api/v1/configuracion/permiso.corto.max_horas"), e.admin()).contentType(MediaType.APPLICATION_JSON).content("{\"valor\":\"2\"}"))
+            mvc.perform(conToken(put("/api/v1/configuracion/permiso.largo.max_horas"), e.admin()).contentType(MediaType.APPLICATION_JSON).content("{\"valor\":\"2\"}"))
                     .andExpect(status().isOk());
-            var otro = escenario();
-            mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), otro.residente()).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+            var tercero = escenario();
+            mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), tercero.residente()).contentType(MediaType.APPLICATION_JSON)
+                    .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(4)))))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.retorno").exists());
         } finally {
-            mvc.perform(conToken(put("/api/v1/configuracion/permiso.corto.max_horas"), e.admin()).contentType(MediaType.APPLICATION_JSON).content("{\"valor\":\"\"}"));
+            mvc.perform(conToken(put("/api/v1/configuracion/permiso.largo.max_horas"), e.admin()).contentType(MediaType.APPLICATION_JSON).content("{\"valor\":\"\"}"));
         }
         mvc.perform(conToken(put("/api/v1/configuracion/permiso.corto.max_horas"), e.admin()).contentType(MediaType.APPLICATION_JSON).content("{\"valor\":\"abc\"}"))
                 .andExpect(status().isBadRequest());

@@ -26,6 +26,9 @@ public class Residente {
     @Column(name = "telefono")
     private String telefono;
 
+    @Column(name = "puede_solicitar_solo")
+    private boolean puedeSolicitarSolo;
+
     @Column(name = "activo")
     private boolean activo;
 

@@ -23,7 +23,16 @@ public final class PermisoResponses {
     public record SolicitudResponse(Long id, Long residenteId, String residenteCodigo, String residenteNombre, TipoPermiso tipo, String motivo,
                                     String destino, Instant salidaSolicitada, Instant retornoSolicitado, Instant retornoAutorizado,
                                     EstadoSolicitud estado, boolean requiereApoderado, Instant decididoEn, String comentarioDecision,
-                                    Instant creadoEn, List<AmpliacionResponse> ampliaciones, List<JustificacionResponse> justificaciones) {
+                                    Instant creadoEn, List<AmpliacionResponse> ampliaciones, List<JustificacionResponse> justificaciones,
+                                    pe.upeu.resi.ResiAPI.enums.OrigenSolicitud origen, String responsableNombre, String responsableCelular, String acompanante) {
+    }
+
+    /** Hijo/a de un apoderado, con lo que necesita para elegirlo y ver cuántos permisos esperan su aceptación. */
+    public record HijoResponse(Long residenteId, String codigo, String nombreCompleto, String habitacion, String cama, boolean puedeSolicitarSolo, long pendientes) {
+    }
+
+    /** Cultos y limpieza de los últimos [dias] días: lo que el pastor revisa antes de aprobar. */
+    public record ResumenResidenteResponse(int dias, long cultosRealizados, long asistencias, long despuesDelCorte, Double promedioLimpieza, long evaluaciones) {
     }
 
     /** El enlace sólo lo obtiene el personal; se entrega al apoderado por el medio institucional (pendiente de definir). */

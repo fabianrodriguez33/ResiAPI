@@ -14,6 +14,10 @@ import pe.upeu.resi.ResiAPI.enums.Rol;
 
 class CultoLimpiezaIntegracionTest extends PruebaIntegracion {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    pe.upeu.resi.ResiAPI.repository.RegistroAuditoriaRepository registrosAuditoria;
+
+
     private long abrir(String preceptor, String tipo) throws Exception {
         var res = mvc.perform(conToken(post("/api/v1/cultos/sesiones"), preceptor).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tipo\":\"" + tipo + "\"}")).andExpect(status().isOk()).andReturn().getResponse();
@@ -69,8 +73,8 @@ class CultoLimpiezaIntegracionTest extends PruebaIntegracion {
                 .content("{\"motivo\":\"Escaneo equivocado\"}")).andExpect(status().isOk());
         mvc.perform(conToken(post("/api/v1/cultos/asistencias/" + asistencia + "/anular"), preceptor).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"motivo\":\"otra vez\"}")).andExpect(status().isConflict());
-        String auditoria = mvc.perform(conToken(get("/api/v1/auditoria?tamanio=100"), admin)).andReturn().getResponse().getContentAsString();
-        assertTrue(auditoria.contains("ASISTENCIA_ANULADA"));
+        // Se consulta por el id de la asistencia: el listado paginado depende del reloj fijado por otras pruebas.
+        assertTrue(registrosAuditoria.findAll().stream().anyMatch(r -> "ASISTENCIA_ANULADA".equals(r.getAccion()) && Long.valueOf(asistencia).equals(r.getEntidadId())));
 
         // Mi historial
         mvc.perform(conToken(get("/api/v1/residentes/yo/asistencias"), tokenDe(u1))).andExpect(status().isOk());

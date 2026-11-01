@@ -17,6 +17,7 @@ import pe.upeu.resi.ResiAPI.entity.Apoderado;
 import pe.upeu.resi.ResiAPI.entity.AsignacionHabitacion;
 import pe.upeu.resi.ResiAPI.entity.Habitacion;
 import pe.upeu.resi.ResiAPI.entity.Residente;
+import pe.upeu.resi.ResiAPI.entity.Usuario;
 import pe.upeu.resi.ResiAPI.entity.ResidenteApoderado;
 import pe.upeu.resi.ResiAPI.enums.Rol;
 import pe.upeu.resi.ResiAPI.exception.Excepciones;
@@ -98,6 +99,10 @@ public class ResidenteService {
         if (r.telefono() != null) {
             res.setTelefono(r.telefono());
         }
+        if (r.puedeSolicitarSolo() != null && r.puedeSolicitarSolo() != res.isPuedeSolicitarSolo()) {
+            res.setPuedeSolicitarSolo(r.puedeSolicitarSolo());
+            auditoria.registrar(sesion.obtener().id(), r.puedeSolicitarSolo() ? "PRIVILEGIO_PERMISOS_OTORGADO" : "PRIVILEGIO_PERMISOS_RETIRADO", "residente", id, null);
+        }
         if (r.activo() != null && r.activo() != res.isActivo()) {
             res.setActivo(r.activo());
             usuario.setActivo(r.activo());
@@ -146,11 +151,37 @@ public class ResidenteService {
     @Transactional
     public ApoderadoResponse agregarApoderado(Long residenteId, ApoderadoRequest r) {
         buscar(residenteId);
-        var a = new Apoderado();
-        a.setNombre(r.nombre().trim());
-        a.setTelefono(r.telefono());
-        a.setEmail(r.email());
-        a = apoderados.save(a);
+        String usuario = r.username() == null || r.username().isBlank() ? null : r.username().trim();
+        Apoderado a = null;
+        if (usuario != null) {
+            var existente = usuarios.findByUsername(usuario);
+            if (existente.isPresent()) {
+                // Un mismo padre con varios hijos: se reutiliza su cuenta.
+                if (existente.get().getRol() != Rol.APODERADO) {
+                    throw new Excepciones.Conflicto("El usuario ya existe");
+                }
+                a = apoderados.findByUsuarioId(existente.get().getId()).orElseThrow(() -> new Excepciones.Conflicto("El usuario ya existe"));
+                final Long apoderadoId = a.getId();
+                if (vinculos.findByResidenteId(residenteId).stream().anyMatch(x -> x.getApoderadoId().equals(apoderadoId))) {
+                    throw new Excepciones.Conflicto("Ese apoderado ya está vinculado al residente");
+                }
+            } else if (r.password() == null || r.password().isBlank()) {
+                throw new Excepciones.SolicitudInvalida("La contraseña es obligatoria para crear la cuenta", java.util.Map.of("password", "La contraseña es obligatoria"));
+            } else {
+                var cuenta = usuarioService.crear(usuario, r.password(), r.nombre(), Rol.APODERADO);
+                a = new Apoderado();
+                a.setUsuarioId(cuenta.getId());
+            }
+        }
+        if (a == null) {
+            a = new Apoderado();
+        }
+        if (a.getId() == null) {
+            a.setNombre(r.nombre().trim());
+            a.setTelefono(r.telefono());
+            a.setEmail(r.email());
+            a = apoderados.save(a);
+        }
         var v = new ResidenteApoderado();
         v.setResidenteId(residenteId);
         v.setApoderadoId(a.getId());
@@ -158,7 +189,7 @@ public class ResidenteService {
         v.setPrincipal(r.principal());
         vinculos.save(v);
         auditoria.registrar(sesion.obtener().id(), "APODERADO_AGREGADO", "residente", residenteId, null);
-        return new ApoderadoResponse(a.getId(), a.getNombre(), a.getTelefono(), a.getEmail(), v.getParentesco(), v.isPrincipal());
+        return new ApoderadoResponse(a.getId(), a.getNombre(), a.getTelefono(), a.getEmail(), v.getParentesco(), v.isPrincipal(), usuarioDe(a));
     }
 
     @Transactional(readOnly = true)
@@ -166,8 +197,12 @@ public class ResidenteService {
         buscar(residenteId);
         return vinculos.findByResidenteId(residenteId).stream().map(v -> {
             var a = apoderados.findById(v.getApoderadoId()).orElseThrow();
-            return new ApoderadoResponse(a.getId(), a.getNombre(), a.getTelefono(), a.getEmail(), v.getParentesco(), v.isPrincipal());
+            return new ApoderadoResponse(a.getId(), a.getNombre(), a.getTelefono(), a.getEmail(), v.getParentesco(), v.isPrincipal(), usuarioDe(a));
         }).toList();
+    }
+
+    private String usuarioDe(Apoderado a) {
+        return a.getUsuarioId() == null ? null : usuarios.findById(a.getUsuarioId()).map(Usuario::getUsername).orElse(null);
     }
 
     /** Letra de cama libre de la habitación: la pedida si es válida y está libre; si no, la primera libre. */
@@ -197,6 +232,6 @@ public class ResidenteService {
         var usuario = usuarios.findById(r.getUsuarioId()).orElseThrow();
         HabitacionResumen hab = asignaciones.findByResidenteIdAndHastaIsNull(r.getId())
                 .flatMap(a -> habitaciones.findById(a.getHabitacionId()).map(h -> new HabitacionResumen(h.getId(), h.getNumero(), a.getCama()))).orElse(null);
-        return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), r.getTelefono(), r.isActivo(), hab);
+        return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), r.getTelefono(), r.isActivo(), hab, r.isPuedeSolicitarSolo());
     }
 }

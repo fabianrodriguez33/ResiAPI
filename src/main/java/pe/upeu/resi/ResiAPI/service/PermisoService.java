@@ -13,6 +13,15 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import pe.upeu.resi.ResiAPI.entity.Apoderado;
+import pe.upeu.resi.ResiAPI.entity.ResidenteApoderado;
+import pe.upeu.resi.ResiAPI.enums.OrigenSolicitud;
+import pe.upeu.resi.ResiAPI.dto.response.PermisoResponses.HijoResponse;
+import pe.upeu.resi.ResiAPI.dto.response.PermisoResponses.ResumenResidenteResponse;
+import pe.upeu.resi.ResiAPI.repository.SesionCultoRepository;
+import pe.upeu.resi.ResiAPI.repository.AsistenciaCultoRepository;
+import pe.upeu.resi.ResiAPI.repository.EvaluacionLimpiezaRepository;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -67,6 +76,9 @@ public class PermisoService {
     private final JustificacionPosteriorRepository justificaciones;
     private final MovimientoGaritaRepository movimientos;
     private final ResidenteRepository residentes;
+    private final SesionCultoRepository sesiones;
+    private final AsistenciaCultoRepository asistenciasRepo;
+    private final EvaluacionLimpiezaRepository evaluaciones;
     private final ResidenteApoderadoRepository vinculos;
     private final ApoderadoRepository apoderados;
     private final UsuarioRepository usuarios;
@@ -80,9 +92,31 @@ public class PermisoService {
 
     // ------------------------------------------------------------------ solicitud
 
+    /** Solicitud enviada por el propio residente: solo corto y largo. Sin el privilegio, pasa primero por su apoderado. */
     @Transactional
     public SolicitudResponse crear(SolicitudRequest r) {
         Residente residente = residenteService.residenteActual();
+        if (r.tipo() == TipoPermiso.PERNOCTE) {
+            throw new Excepciones.Prohibido("Los permisos para pernoctar fuera los envía tu padre, madre o apoderado desde su cuenta");
+        }
+        boolean requiereApoderado = !residente.isPuedeSolicitarSolo() && config.booleano("permiso.apoderado.requerido", true);
+        if (requiereApoderado && vinculos.findByResidenteId(residente.getId()).isEmpty()) {
+            throw new Excepciones.Conflicto("No tienes un apoderado registrado; comunícate con administración");
+        }
+        return guardar(residente, r, OrigenSolicitud.RESIDENTE, requiereApoderado);
+    }
+
+    /** Solicitud enviada por el padre/madre/apoderado de un residente (cualquier tipo): va directo al pastor. */
+    @Transactional
+    public SolicitudResponse crearComoApoderado(SolicitudRequest r) {
+        if (r.residenteId() == null) {
+            throw new Excepciones.SolicitudInvalida("Indique el hijo", Map.of("residenteId", "Indique para quién es el permiso"));
+        }
+        var residente = residentes.findById(exigirHijo(r.residenteId())).orElseThrow();
+        return guardar(residente, r, OrigenSolicitud.APODERADO, false);
+    }
+
+    private SolicitudResponse guardar(Residente residente, SolicitudRequest r, OrigenSolicitud origen, boolean requiereApoderado) {
         if (!residente.isActivo()) {
             throw new Excepciones.Conflicto("El residente no está activo");
         }
@@ -94,16 +128,24 @@ public class PermisoService {
         if (!r.retorno().isAfter(r.salida())) {
             errores.put("retorno", "El retorno debe ser posterior a la salida");
         }
+        if (r.tipo() == TipoPermiso.PERNOCTE) {
+            if (r.responsableNombre() == null || r.responsableNombre().isBlank()) {
+                errores.put("responsableNombre", "Indique el nombre del responsable de la casa a donde va");
+            }
+            if (r.responsableCelular() == null || !r.responsableCelular().trim().matches("[+0-9 ()-]{6,30}")) {
+                errores.put("responsableCelular", "Indique un celular válido del responsable");
+            }
+            if (r.retorno().isAfter(r.salida())
+                    && !r.retorno().atZone(zona).toLocalDate().isAfter(r.salida().atZone(zona).toLocalDate())) {
+                errores.put("retorno", "Pernoctar fuera implica volver otro día");
+            }
+        }
         if (!errores.isEmpty()) {
-            throw new Excepciones.SolicitudInvalida("Fechas inválidas", errores);
+            throw new Excepciones.SolicitudInvalida("Datos inválidos", errores);
         }
         validarReglasConfigurables(r, ahora);
         if (solicitudes.existeSolapada(residente.getId(), r.salida(), r.retorno())) {
-            throw new Excepciones.Conflicto("Ya tienes un permiso pendiente o aprobado que se superpone con ese horario");
-        }
-        boolean requiereApoderado = config.booleano("permiso.apoderado.requerido", true);
-        if (requiereApoderado && vinculos.findByResidenteId(residente.getId()).isEmpty()) {
-            throw new Excepciones.Conflicto("No tienes un apoderado registrado; comunícate con administración");
+            throw new Excepciones.Conflicto("Ya hay un permiso pendiente o aprobado que se superpone con ese horario");
         }
         var s = new SolicitudPermiso();
         s.setResidenteId(residente.getId());
@@ -114,34 +156,129 @@ public class PermisoService {
         s.setRetornoSolicitado(r.retorno());
         s.setRetornoAutorizado(r.retorno());
         s.setRequiereApoderado(requiereApoderado);
+        s.setOrigen(origen);
+        s.setCreadoPor(sesion.obtener().id());
+        if (r.tipo() == TipoPermiso.PERNOCTE) {
+            s.setResponsableNombre(r.responsableNombre().trim());
+            s.setResponsableCelular(r.responsableCelular().trim());
+            s.setAcompanante(r.acompanante() == null || r.acompanante().isBlank() ? "Nadie" : r.acompanante().trim());
+        }
         s.setEstado(requiereApoderado ? EstadoSolicitud.PENDIENTE_APODERADO : EstadoSolicitud.PENDIENTE_PRECEPTOR);
         s.setCreadoEn(ahora);
         s.setActualizadoEn(ahora);
         s = solicitudes.save(s);
-        auditoria.registrar(sesion.obtener().id(), "PERMISO_SOLICITADO", "solicitud_permiso", s.getId(), r.tipo().name());
+        auditoria.registrar(sesion.obtener().id(), "PERMISO_SOLICITADO", "solicitud_permiso", s.getId(), r.tipo().name() + " por " + origen);
         return aResponse(s, false);
     }
 
     private void validarReglasConfigurables(SolicitudRequest r, Instant ahora) {
-        long horas = Duration.between(r.salida(), r.retorno()).toMinutes();
+        long minutos = Duration.between(r.salida(), r.retorno()).toMinutes();
         Long max = switch (r.tipo()) {
             case CORTO -> config.numero("permiso.corto.max_horas").orElse(null);
             case LARGO -> config.numero("permiso.largo.max_horas").orElse(null);
-            case ESPECIAL -> null;
+            case PERNOCTE -> null;
         };
-        if (max != null && horas > max * 60) {
-            throw new Excepciones.SolicitudInvalida("El permiso excede la duración máxima de " + max + " horas",
-                    Map.of("retorno", "Excede las " + max + " horas permitidas"));
+        if (max != null && minutos > max * 60) {
+            String mensaje = r.tipo() == TipoPermiso.CORTO
+                    ? "Un permiso corto dura como máximo " + max + " horas; si necesitas más tiempo solicita un permiso largo"
+                    : "El permiso excede la duración máxima de " + max + " horas";
+            throw new Excepciones.SolicitudInvalida(mensaje, Map.of("retorno", r.tipo() == TipoPermiso.CORTO
+                    ? "Máximo " + max + " horas: pide un permiso largo" : "Excede las " + max + " horas permitidas"));
         }
         var anticipacion = config.numero("permiso.anticipacion_horas");
         if (anticipacion.isPresent()) {
             DayOfWeek dia = r.salida().atZone(zona).getDayOfWeek();
             boolean finDeSemana = dia == DayOfWeek.SATURDAY || dia == DayOfWeek.SUNDAY;
-            if ((finDeSemana || r.tipo() == TipoPermiso.ESPECIAL) && Duration.between(ahora, r.salida()).toHours() < anticipacion.get()) {
+            if ((finDeSemana || r.tipo() == TipoPermiso.PERNOCTE) && Duration.between(ahora, r.salida()).toHours() < anticipacion.get()) {
                 throw new Excepciones.SolicitudInvalida("Este permiso requiere " + anticipacion.get() + " horas de anticipación",
                         Map.of("salida", "Requiere " + anticipacion.get() + " horas de anticipación"));
             }
         }
+    }
+
+    // ------------------------------------------------------------------ cuenta del apoderado
+
+    private Apoderado apoderadoActual() {
+        return apoderados.findByUsuarioId(sesion.obtener().id()).orElseThrow(() -> new Excepciones.Prohibido("El usuario no es un apoderado"));
+    }
+
+    private List<Long> hijosIds() {
+        return vinculos.findByApoderadoId(apoderadoActual().getId()).stream().map(ResidenteApoderado::getResidenteId).toList();
+    }
+
+    /** Falla con «no encontrado» si el residente no es hijo del apoderado de la sesión (no revela su existencia). */
+    private Long exigirHijo(Long residenteId) {
+        if (!hijosIds().contains(residenteId)) {
+            throw new Excepciones.RecursoNoEncontrado("Residente no encontrado");
+        }
+        return residenteId;
+    }
+
+    @Transactional(readOnly = true)
+    public List<HijoResponse> hijos() {
+        var ids = hijosIds();
+        return residentes.findAllById(ids).stream().filter(Residente::isActivo).map(h -> {
+            var datos = residenteService.obtener(h.getId());
+            var hab = datos.habitacion();
+            return new HijoResponse(h.getId(), h.getCodigo(), datos.nombreCompleto(), hab == null ? null : hab.numero(), hab == null ? null : hab.cama(),
+                    h.isPuedeSolicitarSolo(), solicitudes.countByResidenteIdInAndEstado(List.of(h.getId()), EstadoSolicitud.PENDIENTE_APODERADO));
+        }).sorted(java.util.Comparator.comparing(HijoResponse::nombreCompleto)).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PaginaResponse<SolicitudResponse> deMisHijos(EstadoSolicitud estado, Pageable pageable) {
+        var ids = hijosIds();
+        if (ids.isEmpty()) {
+            return PaginaResponse.de(org.springframework.data.domain.Page.<SolicitudPermiso>empty(pageable), s -> aResponse(s, false));
+        }
+        var pagina = estado == null ? solicitudes.findByResidenteIdInOrderByCreadoEnDesc(ids, pageable)
+                : solicitudes.findByResidenteIdInAndEstadoOrderByCreadoEnDesc(ids, estado, pageable);
+        return PaginaResponse.de(pagina, s -> aResponse(s, false));
+    }
+
+    @Transactional(readOnly = true)
+    public SolicitudResponse detalleDeHijo(Long id) {
+        var s = solicitudes.findById(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Solicitud no encontrada"));
+        exigirHijo(s.getResidenteId());
+        return aResponse(s, true);
+    }
+
+    /** El apoderado acepta o rechaza el permiso que su hijo pidió; si acepta, pasa al pastor. */
+    @Transactional
+    public SolicitudResponse decidirComoApoderado(Long id, boolean aprobar) {
+        var s = solicitudes.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Solicitud no encontrada"));
+        exigirHijo(s.getResidenteId());
+        if (s.getEstado() != EstadoSolicitud.PENDIENTE_APODERADO) {
+            throw new Excepciones.Conflicto("Esta solicitud ya no está pendiente de tu decisión");
+        }
+        cambiarEstado(s, aprobar ? EstadoSolicitud.PENDIENTE_PRECEPTOR : EstadoSolicitud.RECHAZADO);
+        auditoria.registrar(sesion.obtener().id(), aprobar ? "APODERADO_APROBO" : "APODERADO_RECHAZO", "solicitud_permiso", id, null);
+        return aResponse(s, false);
+    }
+
+    @Transactional
+    public SolicitudResponse cancelarComoApoderado(Long id) {
+        var s = solicitudes.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Solicitud no encontrada"));
+        exigirHijo(s.getResidenteId());
+        return cancelarSolicitud(s);
+    }
+
+    // ------------------------------------------------------------------ resumen para el pastor
+
+    /** Asistencia a cultos y limpieza de los últimos 30 días del residente de la solicitud (informativo, no aprueba nada). */
+    @Transactional(readOnly = true)
+    public ResumenResidenteResponse resumenDelResidente(Long solicitudId) {
+        var s = solicitudes.findById(solicitudId).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Solicitud no encontrada"));
+        int dias = 30;
+        LocalDate hoy = reloj.instant().atZone(zona).toLocalDate();
+        LocalDate desde = hoy.minusDays(dias);
+        long cultos = sesiones.countByFechaBetween(desde, hoy);
+        long asistencias = asistenciasRepo.contarEnPeriodo(s.getResidenteId(), desde, hoy);
+        long tardanzas = asistenciasRepo.contarTardanzasEnPeriodo(s.getResidenteId(), desde, hoy);
+        var evaluadas = evaluaciones.findByResidenteIdOrderByFechaDesc(s.getResidenteId(), org.springframework.data.domain.PageRequest.of(0, 100)).getContent().stream()
+                .filter(e -> !e.getFecha().isBefore(desde)).toList();
+        Double promedio = evaluadas.isEmpty() ? null : Math.round(evaluadas.stream().mapToInt(e -> e.getTotal()).average().orElse(0) * 10) / 10.0;
+        return new ResumenResidenteResponse(dias, cultos, asistencias, tardanzas, promedio, evaluadas.size());
     }
 
     @Transactional(readOnly = true)
@@ -164,15 +301,18 @@ public class PermisoService {
 
     @Transactional
     public SolicitudResponse cancelar(Long id) {
-        var s = bloquearPropia(id);
-        boolean salio = movimientos.existsBySolicitudIdAndTipoAndAnuladoFalse(id, TipoMovimiento.SALIDA);
+        return cancelarSolicitud(bloquearPropia(id));
+    }
+
+    private SolicitudResponse cancelarSolicitud(SolicitudPermiso s) {
+        boolean salio = movimientos.existsBySolicitudIdAndTipoAndAnuladoFalse(s.getId(), TipoMovimiento.SALIDA);
         boolean cancelable = s.getEstado() == EstadoSolicitud.PENDIENTE_APODERADO || s.getEstado() == EstadoSolicitud.PENDIENTE_PRECEPTOR
                 || (s.getEstado() == EstadoSolicitud.APROBADO && !salio);
         if (!cancelable) {
             throw new Excepciones.Conflicto("La solicitud no se puede cancelar en su estado actual");
         }
         cambiarEstado(s, EstadoSolicitud.CANCELADO);
-        auditoria.registrar(sesion.obtener().id(), "PERMISO_CANCELADO", "solicitud_permiso", id, null);
+        auditoria.registrar(sesion.obtener().id(), "PERMISO_CANCELADO", "solicitud_permiso", s.getId(), null);
         return aResponse(s, false);
     }
 
@@ -418,6 +558,9 @@ public class PermisoService {
         if (actual.rol() == Rol.RESIDENTE && !s.getResidenteId().equals(residenteService.residenteActual().getId())) {
             throw new Excepciones.RecursoNoEncontrado("Solicitud no encontrada");
         }
+        if (actual.rol() == Rol.APODERADO) {
+            exigirHijo(s.getResidenteId());
+        }
         if (actual.rol() == Rol.GARITA) {
             throw new Excepciones.Prohibido("Sin acceso");
         }
@@ -443,7 +586,8 @@ public class PermisoService {
         List<JustificacionResponse> jus = conDetalle ? justificaciones.findBySolicitudIdOrderByCreadoEnDesc(s.getId()).stream().map(this::aResponse).toList() : null;
         return new SolicitudResponse(s.getId(), residente.getId(), residente.getCodigo(), nombre, s.getTipo(), s.getMotivo(), s.getDestino(),
                 s.getSalidaSolicitada(), s.getRetornoSolicitado(), s.getRetornoAutorizado(), s.getEstado(), s.isRequiereApoderado(),
-                s.getDecididoEn(), s.getComentarioDecision(), s.getCreadoEn(), amp, jus);
+                s.getDecididoEn(), s.getComentarioDecision(), s.getCreadoEn(), amp, jus,
+                s.getOrigen(), s.getResponsableNombre(), s.getResponsableCelular(), s.getAcompanante());
     }
 
     private AmpliacionResponse aResponse(AmpliacionPermiso a) {

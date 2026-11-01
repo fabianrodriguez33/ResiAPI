@@ -31,7 +31,8 @@ public final class ResidenteDtos {
             @Size(max = 20) String telefono) {
     }
 
-    public record ResidenteActualizarRequest(@Size(max = 150) String nombreCompleto, @Size(max = 20) String telefono, Boolean activo) {
+    public record ResidenteActualizarRequest(@Size(max = 150) String nombreCompleto, @Size(max = 20) String telefono, Boolean activo,
+                                             Boolean puedeSolicitarSolo) {
     }
 
     public record AsignacionRequest(@NotNull(message = "La habitación es obligatoria") Long habitacionId, @Size(max = 1) String cama) {
@@ -42,6 +43,9 @@ public final class ResidenteDtos {
             @Size(max = 20) String telefono,
             @Email(message = "Correo inválido") @Size(max = 150) String email,
             @Size(max = 50) String parentesco,
-            boolean principal) {
+            boolean principal,
+            /** Opcional: crea (o reutiliza, si ya existe) la cuenta del apoderado para que use la app. */
+            @Pattern(regexp = "[A-Za-z0-9._-]{3,50}", message = "Use 3 a 50 caracteres: letras, números, punto, guion o guion bajo") String username,
+            @Size(min = 8, max = 72, message = "La contraseña debe tener entre 8 y 72 caracteres") String password) {
     }
 }
