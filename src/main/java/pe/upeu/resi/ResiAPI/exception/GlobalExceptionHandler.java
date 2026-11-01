@@ -49,6 +49,13 @@ public class GlobalExceptionHandler {
         return responder(HttpStatus.UNAUTHORIZED, "Credenciales inválidas", null);
     }
 
+    @ExceptionHandler(Excepciones.DemasiadosIntentos.class)
+    ResponseEntity<ErrorResponse> demasiadosIntentos(Excepciones.DemasiadosIntentos e) {
+        var estado = HttpStatus.TOO_MANY_REQUESTS;
+        return ResponseEntity.status(estado).header("Retry-After", String.valueOf(e.getSegundos()))
+                .body(new ErrorResponse(estado.value(), estado.getReasonPhrase(), e.getMessage(), null));
+    }
+
     @ExceptionHandler({AccessDeniedException.class, Excepciones.Prohibido.class})
     ResponseEntity<ErrorResponse> prohibido(RuntimeException e) {
         return responder(HttpStatus.FORBIDDEN, "No tienes permiso para realizar esta acción", null);

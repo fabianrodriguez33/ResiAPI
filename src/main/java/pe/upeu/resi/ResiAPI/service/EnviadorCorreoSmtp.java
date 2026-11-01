@@ -58,4 +58,27 @@ public class EnviadorCorreoSmtp implements EnviadorCorreo {
             throw new Excepciones.Conflicto("No se pudo enviar el correo. Inténtalo más tarde.");
         }
     }
+
+    @Override
+    public void enviar(String destino, String asunto, String texto) {
+        if (destino == null || destino.isBlank() || (!permitidos.isEmpty() && !permitidos.contains(destino.toLowerCase()))) {
+            log.info("Correo omitido: el destino no está autorizado");
+            return;
+        }
+        var sender = remitente.getIfAvailable();
+        if (sender == null) {
+            log.warn("SMTP sin configurar: correo para {}: {} - {}", destino, asunto, texto);
+            return;
+        }
+        var mensaje = new SimpleMailMessage();
+        mensaje.setFrom(desde);
+        mensaje.setTo(destino);
+        mensaje.setSubject("ResiUP: " + asunto);
+        mensaje.setText(texto);
+        try {
+            sender.send(mensaje);
+        } catch (MailException e) {
+            log.error("No se pudo enviar la notificación por correo", e);
+        }
+    }
 }

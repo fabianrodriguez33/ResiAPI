@@ -46,4 +46,18 @@ public final class Excepciones {
             super(mensaje);
         }
     }
+
+    /** 429: demasiados intentos fallidos de ingreso; [segundos] es lo que falta para volver a intentar. */
+    public static class DemasiadosIntentos extends RuntimeException {
+        private final long segundos;
+
+        public DemasiadosIntentos(long segundos) {
+            super("Demasiados intentos. Espera " + (segundos > 60 ? (segundos + 59) / 60 + " minutos" : segundos + " segundos") + " para volver a intentar.");
+            this.segundos = segundos;
+        }
+
+        public long getSegundos() {
+            return segundos;
+        }
+    }
 }

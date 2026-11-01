@@ -10,6 +10,8 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
     Optional<Usuario> findByUsername(String username);
 
+    java.util.List<Usuario> findByRolAndActivoTrue(pe.upeu.resi.ResiAPI.enums.Rol rol);
+
     boolean existsByUsername(String username);
 
     boolean existsByDniAndIdNot(String dni, Long id);

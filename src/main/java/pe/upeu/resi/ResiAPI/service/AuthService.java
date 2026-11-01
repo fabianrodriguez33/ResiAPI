@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.upeu.resi.ResiAPI.dto.request.LoginRequest;
 import pe.upeu.resi.ResiAPI.dto.response.LoginResponse;
 import pe.upeu.resi.ResiAPI.repository.UsuarioRepository;
+import pe.upeu.resi.ResiAPI.security.LimitadorLogin;
 import pe.upeu.resi.ResiAPI.security.TokenService;
 
 @Service
@@ -20,14 +21,19 @@ public class AuthService {
     private final UsuarioRepository usuarios;
     private final PasswordEncoder encoder;
     private final TokenService tokens;
+    private final LimitadorLogin limitador;
 
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
-        var usuario = usuarios.findByUsername(request.username().trim()).orElse(null);
+        String nombre = request.username().trim();
+        limitador.verificar(nombre);
+        var usuario = usuarios.findByUsername(nombre).orElse(null);
         boolean coincide = encoder.matches(request.password(), usuario != null ? usuario.getPasswordHash() : HASH_FICTICIO);
         if (usuario == null || !coincide || !usuario.isActivo()) {
+            limitador.registrarFallo(nombre);
             throw new BadCredentialsException("Credenciales inválidas");
         }
+        limitador.registrarAcierto(nombre);
         return tokens.emitir(usuario);
     }
 }

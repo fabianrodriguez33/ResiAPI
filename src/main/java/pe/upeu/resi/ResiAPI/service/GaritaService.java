@@ -44,6 +44,8 @@ public class GaritaService {
     private final HabitacionRepository habitaciones;
     private final ResidenteService residenteService;
     private final AuditoriaService auditoria;
+    private final NotificacionService avisos;
+    private final java.time.ZoneId zona;
     private final SesionActual sesion;
     private final Clock reloj;
 
@@ -79,6 +81,18 @@ public class GaritaService {
         m.setRegistradoPor(sesion.obtener().id());
         m.setMinutosTarde(tipo == TipoMovimiento.RETORNO ? v.minutosTarde() : null);
         m = movimientos.save(m);
+        String quien = avisos.nombreDe(m.getResidenteId());
+        String hora = java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(ahora.atZone(zona));
+        if (tipo == TipoMovimiento.SALIDA) {
+            avisos.aApoderadosDe(m.getResidenteId(), "Salida registrada", quien + " salió de la residencia a las " + hora + ".");
+        } else {
+            boolean tarde = m.getMinutosTarde() != null && m.getMinutosTarde() > 0;
+            avisos.aApoderadosDe(m.getResidenteId(), "Retorno registrado", quien + " regresó a la residencia a las " + hora
+                    + (tarde ? ", " + m.getMinutosTarde() + " minutos tarde." : "."));
+            if (tarde) {
+                avisos.aRol(pe.upeu.resi.ResiAPI.enums.Rol.PRECEPTOR, "Retorno tardío", quien + " regresó " + m.getMinutosTarde() + " minutos tarde.");
+            }
+        }
         auditoria.registrar(m.getRegistradoPor(), "MOVIMIENTO_" + tipo.name(), "movimiento_garita", m.getId(),
                 "residente=" + m.getResidenteId() + (m.getMinutosTarde() != null && m.getMinutosTarde() > 0 ? " tarde=" + m.getMinutosTarde() + "min" : ""));
         return aResponse(m);

@@ -86,6 +86,7 @@ public class PermisoService {
     private final EvidenciaService evidenciaService;
     private final ConfiguracionService config;
     private final AuditoriaService auditoria;
+    private final NotificacionService avisos;
     private final SesionActual sesion;
     private final Clock reloj;
     private final ZoneId zona;
@@ -173,7 +174,27 @@ public class PermisoService {
         s.setActualizadoEn(ahora);
         s = solicitudes.save(s);
         auditoria.registrar(sesion.obtener().id(), "PERMISO_SOLICITADO", "solicitud_permiso", s.getId(), r.tipo().name() + " por " + origen);
+        avisarSolicitud(s, residente.getId());
         return aResponse(s, false);
+    }
+
+    private static final java.time.format.DateTimeFormatter HORA = java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm");
+
+    private String cuando(Instant instante) {
+        return HORA.format(instante.atZone(zona));
+    }
+
+    private void avisarSolicitud(SolicitudPermiso s, Long residenteId) {
+        String nombre = avisos.nombreDe(residenteId);
+        String detalle = " (" + cuando(s.getSalidaSolicitada()) + " a " + cuando(s.getRetornoSolicitado()) + ")";
+        if (s.getEstado() == EstadoSolicitud.PENDIENTE_APODERADO) {
+            avisos.aApoderadosDe(residenteId, "Permiso por aprobar", nombre + " pidió un permiso " + s.getTipo().name().toLowerCase() + detalle + ". Apruébalo o recházalo en la app.");
+        } else {
+            if (s.getOrigen() == OrigenSolicitud.APODERADO) {
+                avisos.alResidente(residenteId, "Permiso aprobado", "Tu familia te dejó un permiso " + s.getTipo().name().toLowerCase() + detalle + ".");
+            }
+            avisos.aRol(Rol.PRECEPTOR, "Nuevo permiso aprobado", nombre + ": permiso " + s.getTipo().name().toLowerCase() + detalle + ".");
+        }
     }
 
     private void validarReglasConfigurables(SolicitudRequest r, Instant ahora) {
@@ -339,6 +360,9 @@ public class PermisoService {
         s.setDecididoPor(sesion.obtener().id());
         s.setDecididoEn(reloj.instant());
         auditoria.registrar(sesion.obtener().id(), "PERMISO_ANULADO", "solicitud_permiso", id, motivo.trim());
+        String detalle = "El pastor anuló el permiso de " + cuando(s.getSalidaSolicitada()) + ". Motivo: " + motivo.trim();
+        avisos.alResidente(s.getResidenteId(), "Permiso anulado", detalle);
+        avisos.aApoderadosDe(s.getResidenteId(), "Permiso anulado", avisos.nombreDe(s.getResidenteId()) + ": " + detalle);
         return aResponse(s, true);
     }
 
@@ -355,6 +379,12 @@ public class PermisoService {
         s.setDecididoPor(usuarioId);
         s.setDecididoEn(ahora);
         s.setActualizadoEn(ahora);
+        String detalle = " (" + cuando(s.getSalidaSolicitada()) + " a " + cuando(s.getRetornoSolicitado()) + ")";
+        avisos.alResidente(s.getResidenteId(), aprobar ? "Permiso aprobado" : "Permiso rechazado",
+                aprobar ? "Tu familia aprobó tu permiso" + detalle + "." : "Tu familia no aprobó tu permiso" + detalle + ".");
+        if (aprobar) {
+            avisos.aRol(Rol.PRECEPTOR, "Nuevo permiso aprobado", avisos.nombreDe(s.getResidenteId()) + ": permiso " + s.getTipo().name().toLowerCase() + detalle + ".");
+        }
     }
 
     // ------------------------------------------------------------------ apoderado

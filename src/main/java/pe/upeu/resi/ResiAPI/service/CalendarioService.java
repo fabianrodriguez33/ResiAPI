@@ -25,6 +25,7 @@ public class CalendarioService {
 
     private final DiaSinCultoRepository dias;
     private final AuditoriaService auditoria;
+    private final NotificacionService avisos;
     private final SesionActual sesion;
     private final Clock reloj;
     private final ZoneId zona;
@@ -56,6 +57,7 @@ public class CalendarioService {
         d.setCreadoEn(reloj.instant());
         dias.save(d);
         auditoria.registrar(d.getCreadoPor(), "DIA_SIN_CULTO_MARCADO", "dia_sin_culto", null, fecha + ": " + d.getMotivo());
+        avisos.aRol(pe.upeu.resi.ResiAPI.enums.Rol.RESIDENTE, "Día sin cultos", "El " + fecha.getDayOfMonth() + "/" + fecha.getMonthValue() + " no hay cultos: " + d.getMotivo() + ". No afecta tu racha.");
         return new DiaSinCultoResponse(fecha, d.getMotivo());
     }
 
