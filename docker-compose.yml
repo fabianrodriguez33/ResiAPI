@@ -1,15 +1,43 @@
+# Todo el backend en Docker: base de datos PostgreSQL + API.
+#   docker compose up -d --build        (necesita un archivo .env; ver .env.example)
+# Solo la base (para desarrollar la API desde el IDE):  docker compose up -d db
 services:
   db:
     image: postgres:17
     container_name: resiup-db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-resiup}
       POSTGRES_USER: ${DB_USER:-resiup}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
       TZ: America/Lima
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"   # solo accesible desde esta máquina
     volumes:
       - resiup-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-resiup} -d ${DB_NAME:-resiup}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    container_name: resiup-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: db          # dentro de Docker la base se llama «db»
+      DB_PORT: 5432
+      EVIDENCIAS_DIR: /app/evidencias
+    ports:
+      - "8080:8080"
+    volumes:
+      - resiup-evidencias:/app/evidencias
+
 volumes:
   resiup-pgdata:
+  resiup-evidencias:

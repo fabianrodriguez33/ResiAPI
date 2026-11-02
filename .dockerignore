@@ -1,0 +1,6 @@
+target
+.git
+.env
+evidencias
+HELP.md
+*.md
