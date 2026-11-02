@@ -46,6 +46,15 @@ public class Usuario {
     @Column(name = "telefono")
     private String telefono;
 
+    @Column(name = "clave_provisional_hash")
+    private String claveProvisionalHash;
+
+    @Column(name = "clave_provisional_expira")
+    private Instant claveProvisionalExpira;
+
+    @Column(name = "clave_provisional_enviada")
+    private Instant claveProvisionalEnviada;
+
     @Column(name = "activo")
     private boolean activo;
 

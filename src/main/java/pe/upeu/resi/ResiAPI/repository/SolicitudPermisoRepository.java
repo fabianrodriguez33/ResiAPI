@@ -32,6 +32,8 @@ public interface SolicitudPermisoRepository extends JpaRepository<SolicitudPermi
     @Query("select s from SolicitudPermiso s where s.id = :id")
     Optional<SolicitudPermiso> findByIdForUpdate(@Param("id") Long id);
 
+    Optional<SolicitudPermiso> findByCreadoPorAndClaveCliente(Long creadoPor, String claveCliente);
+
     @Query("select s from SolicitudPermiso s where s.residenteId = :residenteId and s.estado = 'APROBADO' and s.retornoAutorizado >= :ahora order by s.salidaSolicitada asc")
     List<SolicitudPermiso> findAprobadasNoVencidas(@Param("residenteId") Long residenteId, @Param("ahora") Instant ahora);
 

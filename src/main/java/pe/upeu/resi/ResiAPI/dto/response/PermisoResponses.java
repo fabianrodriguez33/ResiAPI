@@ -12,11 +12,12 @@ public final class PermisoResponses {
     }
 
     public record AmpliacionResponse(Long id, Long solicitudId, String motivo, Long evidenciaId, Instant retornoOriginal, Instant retornoNuevo,
-                                     EstadoRevision estado, Instant revisadaEn, String comentario, Instant creadoEn) {
+                                     EstadoRevision estado, Instant revisadaEn, String comentario, Instant creadoEn,
+                                     String residenteNombre, String residenteCodigo) {
     }
 
     public record JustificacionResponse(Long id, Long solicitudId, String motivo, Long evidenciaId, EstadoRevision estado, Instant revisadaEn,
-                                        String comentario, Instant creadoEn) {
+                                        String comentario, Instant creadoEn, String residenteNombre, String residenteCodigo) {
     }
 
     /** {@code ampliaciones} y {@code justificaciones} sólo se incluyen en el detalle. */

@@ -118,6 +118,12 @@ public class PermisoService {
     }
 
     private SolicitudResponse guardar(Residente residente, SolicitudRequest r, OrigenSolicitud origen, boolean requiereApoderado) {
+        if (r.claveCliente() != null && !r.claveCliente().isBlank()) {
+            var previa = solicitudes.findByCreadoPorAndClaveCliente(sesion.obtener().id(), r.claveCliente().trim());
+            if (previa.isPresent()) {
+                return aResponse(previa.get(), false); // el envío se repitió: ya estaba creada
+            }
+        }
         if (!residente.isActivo()) {
             throw new Excepciones.Conflicto("El residente no está activo");
         }
@@ -159,6 +165,9 @@ public class PermisoService {
         s.setRequiereApoderado(requiereApoderado);
         s.setOrigen(origen);
         s.setCreadoPor(sesion.obtener().id());
+        if (r.claveCliente() != null && !r.claveCliente().isBlank()) {
+            s.setClaveCliente(r.claveCliente().trim());
+        }
         if (r.tipo() == TipoPermiso.PERNOCTE) {
             s.setResponsableNombre(r.responsableNombre().trim());
             s.setResponsableCelular(r.responsableCelular().trim());
@@ -492,6 +501,7 @@ public class PermisoService {
         a.setCreadoEn(ahora);
         a = ampliaciones.save(a);
         auditoria.registrar(sesion.obtener().id(), "AMPLIACION_SOLICITADA", "ampliacion_permiso", a.getId(), null);
+        avisos.aRol(Rol.PRECEPTOR, "Ampliación por revisar", avisos.nombreDe(s.getResidenteId()) + " pide volver a las " + cuando(a.getRetornoNuevo()) + ". Motivo: " + a.getMotivo());
         return aResponse(a);
     }
 
@@ -516,6 +526,11 @@ public class PermisoService {
             s.setActualizadoEn(ahora);
         }
         auditoria.registrar(a.getRevisadaPor(), d.aprobar() ? "AMPLIACION_APROBADA" : "AMPLIACION_RECHAZADA", "ampliacion_permiso", ampliacionId, d.comentario());
+        String hasta = cuando(a.getRetornoNuevo());
+        avisos.alResidente(s.getResidenteId(), d.aprobar() ? "Ampliación aprobada" : "Ampliación rechazada",
+                d.aprobar() ? "Ahora puedes volver hasta las " + hasta + "." : "No se aprobó volver a las " + hasta + (d.comentario() != null && !d.comentario().isBlank() ? ". " + d.comentario() : "."));
+        avisos.aApoderadosDe(s.getResidenteId(), d.aprobar() ? "Ampliación aprobada" : "Ampliación rechazada",
+                avisos.nombreDe(s.getResidenteId()) + (d.aprobar() ? " puede volver hasta las " + hasta + "." : ": no se aprobó volver a las " + hasta + "."));
         return aResponse(a);
     }
 
@@ -548,6 +563,7 @@ public class PermisoService {
         j.setCreadoEn(reloj.instant());
         j = justificaciones.save(j);
         auditoria.registrar(sesion.obtener().id(), "JUSTIFICACION_PRESENTADA", "justificacion_posterior", j.getId(), null);
+        avisos.aRol(Rol.PRECEPTOR, "Justificación por revisar", avisos.nombreDe(s.getResidenteId()) + " justifica su tardanza. Motivo: " + j.getMotivo());
         return aResponse(j);
     }
 
@@ -562,6 +578,9 @@ public class PermisoService {
         j.setRevisadaEn(reloj.instant());
         j.setComentario(d.comentario());
         auditoria.registrar(j.getRevisadaPor(), d.aprobar() ? "JUSTIFICACION_ACEPTADA" : "JUSTIFICACION_RECHAZADA", "justificacion_posterior", id, d.comentario());
+        var origen = solicitudes.findById(j.getSolicitudId()).orElseThrow();
+        avisos.alResidente(origen.getResidenteId(), d.aprobar() ? "Justificación aceptada" : "Justificación rechazada",
+                d.aprobar() ? "El pastor aceptó tu justificación." : "El pastor no aceptó tu justificación" + (d.comentario() != null && !d.comentario().isBlank() ? ": " + d.comentario() : "."));
         return aResponse(j);
     }
 
@@ -639,12 +658,21 @@ public class PermisoService {
     }
 
     private AmpliacionResponse aResponse(AmpliacionPermiso a) {
+        var quien = quienEs(a.getSolicitudId());
         return new AmpliacionResponse(a.getId(), a.getSolicitudId(), a.getMotivo(), a.getEvidenciaId(), a.getRetornoOriginal(), a.getRetornoNuevo(),
-                a.getEstado(), a.getRevisadaEn(), a.getComentario(), a.getCreadoEn());
+                a.getEstado(), a.getRevisadaEn(), a.getComentario(), a.getCreadoEn(), quien[0], quien[1]);
+    }
+
+    /** Nombre y código del residente dueño de la solicitud, para que el pastor sepa de quién es cada trámite. */
+    private String[] quienEs(Long solicitudId) {
+        var s = solicitudes.findById(solicitudId).orElseThrow();
+        var r = residentes.findById(s.getResidenteId()).orElseThrow();
+        return new String[] {usuarios.findById(r.getUsuarioId()).orElseThrow().getNombreCompleto(), r.getCodigo()};
     }
 
     private JustificacionResponse aResponse(JustificacionPosterior j) {
+        var quien = quienEs(j.getSolicitudId());
         return new JustificacionResponse(j.getId(), j.getSolicitudId(), j.getMotivo(), j.getEvidenciaId(), j.getEstado(), j.getRevisadaEn(),
-                j.getComentario(), j.getCreadoEn());
+                j.getComentario(), j.getCreadoEn(), quien[0], quien[1]);
     }
 }

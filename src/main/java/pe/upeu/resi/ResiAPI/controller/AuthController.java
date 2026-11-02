@@ -26,6 +26,19 @@ public class AuthController {
         return auth.login(request);
     }
 
+    /** Responde siempre lo mismo, exista o no el usuario y tenga o no correo verificado. */
+    @PostMapping("/olvide-clave")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void olvideClave(@Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.ClaveDtos.OlvideClaveRequest request) {
+        auth.olvideClave(request.username());
+    }
+
+    @PostMapping("/cambiar-clave")
+    @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void cambiarClave(@Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.ClaveDtos.CambiarClaveRequest request) {
+        auth.cambiarClave(request.claveActual(), request.claveNueva());
+    }
+
     @GetMapping("/me")
     public UsuarioResponse me() {
         return usuarios.actual();

@@ -35,6 +35,11 @@ public class TokenService {
     }
 
     public LoginResponse emitir(Usuario usuario) {
+        return emitir(usuario, false);
+    }
+
+    /** [debeCambiarClave]: entró con una clave provisional y la app le exige elegir una nueva. */
+    public LoginResponse emitir(Usuario usuario, boolean debeCambiarClave) {
         Instant ahora = reloj.instant();
         long duracion = props.jwt().expiracionSegundos();
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -46,6 +51,6 @@ public class TokenService {
                 .build();
         String token = encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
         return new LoginResponse(token, "Bearer", duracion, usuario.getUsername(), usuario.getNombreCompleto(),
-                List.of(usuario.getRol().name()), permisosDe(usuario.getRol()));
+                List.of(usuario.getRol().name()), permisosDe(usuario.getRol()), debeCambiarClave);
     }
 }

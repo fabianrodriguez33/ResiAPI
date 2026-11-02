@@ -73,6 +73,9 @@ public class SolicitudPermiso {
     @Column(name = "acompanante")
     private String acompanante;
 
+    @Column(name = "clave_cliente")
+    private String claveCliente;
+
     @Column(name = "creado_en")
     private Instant creadoEn;
 

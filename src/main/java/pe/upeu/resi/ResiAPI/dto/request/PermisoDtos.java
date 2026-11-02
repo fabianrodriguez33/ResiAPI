@@ -22,7 +22,9 @@ public final class PermisoDtos {
             /** Solo para PERNOCTE: quien recibe al residente, su celular y con quién viaja. */
             @Size(max = 150, message = "Máximo 150 caracteres") String responsableNombre,
             @Size(max = 30, message = "Máximo 30 caracteres") String responsableCelular,
-            @Size(max = 150, message = "Máximo 150 caracteres") String acompanante) {
+            @Size(max = 150, message = "Máximo 150 caracteres") String acompanante,
+            /** Clave generada por la app al pedir sin conexión: evita duplicar la solicitud si el envío se repite. */
+            @Size(max = 40) String claveCliente) {
     }
 
     public record DecisionRequest(@NotNull(message = "Indique si se aprueba o se rechaza") Boolean aprobar,
