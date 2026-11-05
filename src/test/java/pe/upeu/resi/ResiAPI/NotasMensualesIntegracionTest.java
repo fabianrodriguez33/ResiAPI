@@ -32,6 +32,48 @@ class NotasMensualesIntegracionTest extends PruebaIntegracion {
     }
 
     @Test
+    void laNotaPorDiasUsaElPorcentajeExactoSinRedondear() {
+        assertEquals("AD", NotasService.notaPorDias(9, 10));    // 90 %
+        assertEquals("A", NotasService.notaPorDias(899, 1000)); // 89,9 %
+        assertEquals("A", NotasService.notaPorDias(68, 100));
+        assertEquals("B", NotasService.notaPorDias(679, 1000)); // 67,9 %
+        assertEquals("B", NotasService.notaPorDias(1, 2));      // 50 %
+        assertEquals("C", NotasService.notaPorDias(499, 1000)); // 49,9 %
+        assertEquals("C", NotasService.notaPorDias(0, 5));
+        assertEquals("AD", NotasService.notaPorDias(20, 20));
+        assertTrue(NotasService.usaDias(java.time.YearMonth.of(2026, 11)));
+        assertTrue(!NotasService.usaDias(java.time.YearMonth.of(2026, 10)));
+    }
+
+    @Test
+    void unDiaJustificadoSaleDelTotalYLosMesesAnterioresConservanLaEscalaAntigua() throws Exception {
+        String admin = tokenDeRol(Rol.ADMINISTRADOR), pastor = tokenDeRol(Rol.PRECEPTOR);
+        long id = crearResidente(admin);
+        String residente = tokenDe(ultimoUsuario);
+        LocalDate lunes = lunesAleatorio();
+        fijarLima(lunes, 7, 0);
+        mvc.perform(conToken(post("/api/v1/cultos/sesiones"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"tipo\":\"MATUTINO\"}")).andExpect(status().isOk());
+        fijarLima(lunes.plusDays(1), 9, 0);
+        String q = "?anio=" + lunes.getYear() + "&mes=" + lunes.getMonthValue();
+        var antes = leer(mvc.perform(conToken(get("/api/v1/residentes/yo/resumen-mensual" + q), residente)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.metodologia").value("POR_DIAS")).andReturn().getResponse().getContentAsString());
+        assertEquals(0, antes.get("diasAsistidos").asLong());
+        assertEquals(0, antes.get("faltasJustificadas").asLong());
+        long programados = antes.get("diasConCulto").asLong();
+        assertTrue(programados >= 1);
+        assertEquals("C", antes.get("notaCultos").asText());
+        mvc.perform(conToken(post("/api/v1/habilitacion/faltas/justificar"), pastor).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"residenteId\":" + id + ",\"fecha\":\"" + lunes + "\",\"motivo\":\"Enfermedad\"}")).andExpect(status().isNoContent());
+        var despues = leer(mvc.perform(conToken(get("/api/v1/residentes/yo/resumen-mensual" + q), residente)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(1, despues.get("faltasJustificadas").asLong());
+        assertEquals(programados, despues.get("diasConCulto").asLong(), "los programados no cambian: el día justificado sale solo del total del porcentaje");
+        // Mes anterior a noviembre de 2026: escala antigua, sin días ni porcentaje.
+        mvc.perform(conToken(get("/api/v1/residentes/yo/resumen-mensual?anio=2026&mes=10"), residente)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.metodologia").value("ANTERIOR")).andExpect(jsonPath("$.notaCultos").value("C"))
+                .andExpect(jsonPath("$.diasAsistidos").doesNotExist()).andExpect(jsonPath("$.porcentajeAsistencia").doesNotExist());
+    }
+
+    @Test
     void elResidenteVeSuResumenDelMesYElPastorElReporteYElExcel() throws Exception {
         String admin = tokenDeRol(Rol.ADMINISTRADOR), pastor = tokenDeRol(Rol.PRECEPTOR);
         long id = crearResidente(admin);
@@ -47,7 +89,8 @@ class NotasMensualesIntegracionTest extends PruebaIntegracion {
 
         String q = "?anio=" + lunes.getYear() + "&mes=" + lunes.getMonthValue();
         mvc.perform(conToken(get("/api/v1/residentes/yo/resumen-mensual" + q), residente)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.cultos").value(1)).andExpect(jsonPath("$.notaCultos").value("C"))
+                .andExpect(jsonPath("$.cultos").value(1)).andExpect(jsonPath("$.metodologia").value("POR_DIAS")).andExpect(jsonPath("$.diasAsistidos").value(1))
+                .andExpect(jsonPath("$.notaProvisional").value(true))
                 .andExpect(jsonPath("$.evaluaciones").value(1)).andExpect(jsonPath("$.promedioLimpieza").value(17.0)).andExpect(jsonPath("$.notaLimpieza").value("A"));
         // Otro mes sin datos: limpieza sin nota.
         mvc.perform(conToken(get("/api/v1/residentes/yo/resumen-mensual?anio=2030&mes=2"), residente)).andExpect(jsonPath("$.cultos").value(0))
@@ -60,6 +103,14 @@ class NotasMensualesIntegracionTest extends PruebaIntegracion {
         assertTrue(excel.getHeader("Content-Disposition").contains("notas-" + lunes.getYear()));
         byte[] datos = excel.getContentAsByteArray();
         assertTrue(datos.length > 1000 && datos[0] == 'P' && datos[1] == 'K', "es un .xlsx (zip)");
+        try (var libro = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(datos))) {
+            assertEquals(2, libro.getNumberOfSheets());
+            var cab = libro.getSheetAt(0).getRow(2);
+            String[] esperadas = {"Código universitario", "Nombre completo", "Días asistidos", "Días con culto programado", "Faltas justificadas", "Porcentaje de asistencia", "Nota final"};
+            for (int i = 0; i < esperadas.length; i++) assertEquals(esperadas[i], cab.getCell(i).getStringCellValue());
+            assertEquals("Habitación", libro.getSheetAt(1).getRow(2).getCell(3).getStringCellValue());
+            assertEquals("Nota de limpieza", libro.getSheetAt(1).getRow(2).getCell(7).getStringCellValue());
+        }
 
         mvc.perform(conToken(get("/api/v1/reportes/mensual" + q), residente)).andExpect(status().isForbidden());
         mvc.perform(conToken(get("/api/v1/reportes/mensual.xlsx" + q), tokenDeRol(Rol.GARITA))).andExpect(status().isForbidden());
