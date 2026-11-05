@@ -5,7 +5,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
-import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -209,27 +208,28 @@ public class PermisoService {
         }
     }
 
+    /**
+     * Tipo según lo que dura la salida y cuándo regresa (reglas del 2026-11-05): corto hasta 2 horas; largo más de 2 horas
+     * regresando el mismo día (hasta las 23:59), sin tope de horas; pernoctar fuera si regresa otro día (se valida en {@code guardar}).
+     * No hay anticipación mínima para ningún tipo.
+     */
     private void validarReglasConfigurables(SolicitudRequest r, Instant ahora) {
         long minutos = Duration.between(r.salida(), r.retorno()).toMinutes();
-        Long max = switch (r.tipo()) {
-            case CORTO -> config.numero("permiso.corto.max_horas").orElse(null);
-            case LARGO -> config.numero("permiso.largo.max_horas").orElse(null);
-            case PERNOCTE -> null;
-        };
-        if (max != null && minutos > max * 60) {
-            String mensaje = r.tipo() == TipoPermiso.CORTO
-                    ? "Un permiso corto dura como máximo " + max + " horas; si necesitas más tiempo solicita un permiso largo"
-                    : "El permiso excede la duración máxima de " + max + " horas";
-            throw new Excepciones.SolicitudInvalida(mensaje, Map.of("retorno", r.tipo() == TipoPermiso.CORTO
-                    ? "Máximo " + max + " horas: pide un permiso largo" : "Excede las " + max + " horas permitidas"));
-        }
-        var anticipacion = config.numero("permiso.anticipacion_horas");
-        if (anticipacion.isPresent()) {
-            DayOfWeek dia = r.salida().atZone(zona).getDayOfWeek();
-            boolean finDeSemana = dia == DayOfWeek.SATURDAY || dia == DayOfWeek.SUNDAY;
-            if ((finDeSemana || r.tipo() == TipoPermiso.PERNOCTE) && Duration.between(ahora, r.salida()).toHours() < anticipacion.get()) {
-                throw new Excepciones.SolicitudInvalida("Este permiso requiere " + anticipacion.get() + " horas de anticipación",
-                        Map.of("salida", "Requiere " + anticipacion.get() + " horas de anticipación"));
+        if (r.tipo() == TipoPermiso.CORTO) {
+            Long max = config.numero("permiso.corto.max_horas").orElse(2L);
+            if (minutos > max * 60) {
+                throw new Excepciones.SolicitudInvalida("Un permiso corto dura como máximo " + max + " horas; si necesitas más tiempo solicita un permiso largo",
+                        Map.of("retorno", "Máximo " + max + " horas: pide un permiso largo"));
+            }
+        } else if (r.tipo() == TipoPermiso.LARGO) {
+            long corto = config.numero("permiso.corto.max_horas").orElse(2L);
+            if (minutos <= corto * 60) {
+                throw new Excepciones.SolicitudInvalida("Una salida de hasta " + corto + " horas es un permiso corto",
+                        Map.of("retorno", "Dura " + corto + " horas o menos: pide un permiso corto"));
+            }
+            if (!r.retorno().atZone(zona).toLocalDate().equals(r.salida().atZone(zona).toLocalDate())) {
+                throw new Excepciones.SolicitudInvalida("Un permiso largo debe regresar el mismo día (hasta las 23:59); si regresas otro día corresponde pernoctar fuera",
+                        Map.of("retorno", "Debe regresar el mismo día, o pedir pernoctar fuera"));
             }
         }
     }

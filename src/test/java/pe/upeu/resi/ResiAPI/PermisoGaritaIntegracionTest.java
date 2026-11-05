@@ -44,7 +44,7 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
 
     private long crearSolicitud(Escenario e, Instant salida, Instant retorno) throws Exception {
         var res = mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON)
-                .content(cuerpoSolicitud("LARGO", salida, retorno))).andExpect(status().isCreated()).andReturn().getResponse();
+                .content(cuerpoSolicitud(Duration.between(salida, retorno).compareTo(Duration.ofHours(2)) > 0 ? "LARGO" : "CORTO", salida, retorno))).andExpect(status().isCreated()).andReturn().getResponse();
         return leer(res.getContentAsString()).get("id").asLong();
     }
 
@@ -232,7 +232,7 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
 
         long id = crearSolicitud(e, t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(4)));
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON)
-                .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(3)), t0.plus(Duration.ofHours(5))))).andExpect(status().isConflict());
+                .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(3)), t0.plus(Duration.ofHours(6))))).andExpect(status().isConflict());
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/cancelar"), e.residente())).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("CANCELADO"));
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/cancelar"), e.residente())).andExpect(status().isConflict());
         // Con la anterior cancelada, ya no hay superposición
@@ -240,7 +240,7 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
     }
 
     @Test
-    void elPermisoCortoDuraComoMaximoDosHorasYLoLargoSeConfigura() throws Exception {
+    void elTipoDeSalidaDependeDeLaDuracionYDelRegresoElMismoDia() throws Exception {
         var e = escenario();
         Instant t0 = base();
         // Corto: 2 horas exactas sí; 3 horas no (debe pedirse largo).
@@ -253,17 +253,20 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         // El mismo horario de 3 horas como permiso largo es válido.
         mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), otro.residente()).contentType(MediaType.APPLICATION_JSON)
                 .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(4))))).andExpect(status().isCreated());
-        // El límite del largo es configurable y no está codificado.
-        try {
-            mvc.perform(conToken(put("/api/v1/configuracion/permiso.largo.max_horas"), e.admin()).contentType(MediaType.APPLICATION_JSON).content("{\"valor\":\"2\"}"))
-                    .andExpect(status().isOk());
-            var tercero = escenario();
-            mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), tercero.residente()).contentType(MediaType.APPLICATION_JSON)
-                    .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(4)))))
-                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.retorno").exists());
-        } finally {
-            mvc.perform(conToken(put("/api/v1/configuracion/permiso.largo.max_horas"), e.admin()).contentType(MediaType.APPLICATION_JSON).content("{\"valor\":\"\"}"));
-        }
+        // Larga de 2 horas o menos: debe ser corta.
+        var tercero = escenario();
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), tercero.residente()).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(3)))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.retorno").exists());
+        // Larga sin tope de horas mientras regrese el mismo día (10:00 a 23:59 = casi 14 h).
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), tercero.residente()).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(13)).plus(Duration.ofMinutes(59)))))
+                .andExpect(status().isCreated());
+        // Larga que cruza la medianoche: debe pedirse pernoctar fuera.
+        var cuarto = escenario();
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), cuarto.residente()).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpoSolicitud("LARGO", t0.plus(Duration.ofHours(1)), t0.plus(Duration.ofHours(14)))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.retorno").exists());
         mvc.perform(conToken(put("/api/v1/configuracion/permiso.corto.max_horas"), e.admin()).contentType(MediaType.APPLICATION_JSON).content("{\"valor\":\"abc\"}"))
                 .andExpect(status().isBadRequest());
     }
