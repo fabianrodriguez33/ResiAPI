@@ -86,6 +86,12 @@ public class PermisoController {
         return permisos.listar(estado, pagina(pagina, tamanio));
     }
 
+    @GetMapping("/solicitudes/de-suspendidos")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.List<SolicitudResponse> deSuspendidos() {
+        return permisos.deResidentesSuspendidos();
+    }
+
     @PostMapping("/solicitudes/{id}/anular")
     @PreAuthorize("hasRole('PRECEPTOR')")
     public SolicitudResponse anular(@PathVariable Long id, @Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.PermisoDtos.AnulacionRequest request) {

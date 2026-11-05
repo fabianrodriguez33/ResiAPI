@@ -26,6 +26,8 @@ public interface SolicitudPermisoRepository extends JpaRepository<SolicitudPermi
 
     Page<SolicitudPermiso> findByEstadoOrderByCreadoEnDesc(EstadoSolicitud estado, Pageable pageable);
 
+    java.util.List<SolicitudPermiso> findByEstado(EstadoSolicitud estado);
+
     Page<SolicitudPermiso> findAllByOrderByCreadoEnDesc(Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

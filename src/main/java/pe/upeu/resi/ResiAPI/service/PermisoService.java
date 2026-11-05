@@ -87,6 +87,7 @@ public class PermisoService {
     private final ConfiguracionService config;
     private final AuditoriaService auditoria;
     private final NotificacionService avisos;
+    private final HabilitacionService habilitacion;
     private final SesionActual sesion;
     private final Clock reloj;
     private final ZoneId zona;
@@ -97,6 +98,7 @@ public class PermisoService {
     @Transactional
     public SolicitudResponse crear(SolicitudRequest r) {
         Residente residente = residenteService.residenteActual();
+        habilitacion.exigirHabilitado(residente, true);
         if (r.tipo() == TipoPermiso.PERNOCTE) {
             throw new Excepciones.Prohibido("Los permisos para pernoctar fuera los envía tu padre, madre o apoderado desde su cuenta");
         }
@@ -114,6 +116,7 @@ public class PermisoService {
             throw new Excepciones.SolicitudInvalida("Indique el hijo", Map.of("residenteId", "Indique para quién es el permiso"));
         }
         var residente = residentes.findById(exigirHijo(r.residenteId())).orElseThrow();
+        habilitacion.exigirHabilitado(residente, false);
         return guardar(residente, r, OrigenSolicitud.APODERADO, false);
     }
 
@@ -381,6 +384,9 @@ public class PermisoService {
      */
     private void resolverPorFamilia(SolicitudPermiso s, boolean aprobar, Long usuarioId) {
         Instant ahora = reloj.instant();
+        if (aprobar && habilitacion.suspendidoParaSalida(residentes.findById(s.getResidenteId()).orElseThrow(), s.getSalidaSolicitada())) {
+            throw new Excepciones.Conflicto("El residente está suspendido esta semana: la solicitud no se puede aprobar");
+        }
         if (aprobar && !s.getSalidaSolicitada().isAfter(ahora)) {
             throw new Excepciones.Conflicto("El permiso venció: la hora de salida solicitada ya pasó");
         }
@@ -596,6 +602,37 @@ public class PermisoService {
     @Transactional
     public int vencerPendientes() {
         return solicitudes.marcarVencidas(reloj.instant());
+    }
+
+    /**
+     * Suspensión por faltas: una solicitud sin aprobar (o por el procedimiento excepcional) de un residente inhabilitado, con salida
+     * dentro de la semana de suspensión, se cancela sola. Los permisos ya aprobados no se tocan: los revisa el pastor.
+     */
+    @Scheduled(fixedDelayString = "PT30M")
+    @Transactional
+    public int cancelarPendientesDeSuspendidos() {
+        int cancelados = 0;
+        for (var s : solicitudes.findByEstado(EstadoSolicitud.PENDIENTE_APODERADO)) {
+            var residente = residentes.findById(s.getResidenteId()).orElseThrow();
+            if (habilitacion.suspendidoParaSalida(residente, s.getSalidaSolicitada())) {
+                cambiarEstado(s, EstadoSolicitud.CANCELADO);
+                s.setComentarioDecision("Cancelado por suspensión: el residente está inhabilitado esta semana");
+                auditoria.registrar(null, "PERMISO_CANCELADO_POR_SUSPENSION", "solicitud_permiso", s.getId(), null);
+                avisos.alResidente(residente.getId(), "Permiso cancelado por suspensión", "Tu solicitud para el " + cuando(s.getSalidaSolicitada()) + " se canceló: estás inhabilitado esta semana.");
+                avisos.aApoderadosDe(residente.getId(), "Permiso cancelado por suspensión", avisos.nombreDe(residente.getId()) + " está inhabilitado esta semana: su solicitud para el " + cuando(s.getSalidaSolicitada()) + " se canceló.");
+                cancelados++;
+            }
+        }
+        return cancelados;
+    }
+
+    /** Permisos aprobados y sin usar de residentes inhabilitados esta semana, para que el pastor decida si los anula. */
+    @Transactional(readOnly = true)
+    public List<SolicitudResponse> deResidentesSuspendidos() {
+        return solicitudes.findByEstado(EstadoSolicitud.APROBADO).stream()
+                .filter(s -> !movimientos.existsBySolicitudIdAndTipoAndAnuladoFalse(s.getId(), TipoMovimiento.SALIDA))
+                .filter(s -> habilitacion.suspendidoParaSalida(residentes.findById(s.getResidenteId()).orElseThrow(), s.getSalidaSolicitada()))
+                .map(s -> aResponse(s, false)).toList();
     }
 
     // ------------------------------------------------------------------ utilidades

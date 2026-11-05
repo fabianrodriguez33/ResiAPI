@@ -17,6 +17,11 @@ public interface SesionCultoRepository extends JpaRepository<SesionCulto, Long> 
 
     List<SesionCulto> findByFechaOrderByInicioAsc(LocalDate fecha);
 
+    /** Fechas con al menos un culto realizado (sesión abierta por el pastor). */
+    @org.springframework.data.jpa.repository.Query("select distinct s.fecha from SesionCulto s where s.fecha between :desde and :hasta")
+    List<LocalDate> fechasConSesion(@org.springframework.data.repository.query.Param("desde") LocalDate desde,
+                                    @org.springframework.data.repository.query.Param("hasta") LocalDate hasta);
+
     long countByFechaBetween(LocalDate desde, LocalDate hasta);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

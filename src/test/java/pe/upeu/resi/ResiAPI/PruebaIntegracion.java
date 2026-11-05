@@ -33,6 +33,8 @@ public abstract class PruebaIntegracion {
     protected RelojPrueba reloj;
     @Autowired
     protected CorreoPrueba correo;
+    @Autowired
+    protected pe.upeu.resi.ResiAPI.repository.SesionCultoRepository sesionesCulto;
 
     @AfterEach
     void liberarReloj() {
@@ -44,9 +46,19 @@ public abstract class PruebaIntegracion {
         reloj.fijar(fecha.atTime(hora, minuto).atZone(java.time.ZoneId.of("America/Lima")).toInstant());
     }
 
-    /** Lunes aleatorio lejano: evita choques con sesiones de culto de otras pruebas o ejecuciones. */
+    /**
+     * Lunes aleatorio lejano. La base de pruebas conserva las sesiones de culto de ejecuciones anteriores y la habilitación
+     * semanal mira la semana previa, así que se elige un lunes cuya semana anterior no tenga cultos registrados.
+     */
     protected java.time.LocalDate lunesAleatorio() {
-        return java.time.LocalDate.of(2031, 1, 6).plusWeeks(new java.util.Random().nextInt(3000));
+        var azar = new java.util.Random();
+        for (int intento = 0; intento < 200; intento++) {
+            var lunes = java.time.LocalDate.of(2031, 1, 6).plusWeeks(azar.nextInt(3000));
+            if (sesionesCulto.fechasConSesion(lunes.minusDays(9), lunes.minusDays(1)).isEmpty()) {
+                return lunes;
+            }
+        }
+        throw new IllegalStateException("No se encontró una semana sin cultos para la prueba");
     }
 
     protected String qrDe(String username) throws Exception {

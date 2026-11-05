@@ -19,5 +19,11 @@ public interface AsistenciaCultoRepository extends JpaRepository<AsistenciaCulto
 
     Optional<AsistenciaCulto> findBySesionIdAndResidenteId(Long sesionId, Long residenteId);
 
+    /** Fechas en las que el residente asistió al menos a un culto (asistencia no anulada). */
+    @org.springframework.data.jpa.repository.Query("select distinct s.fecha from AsistenciaCulto a, SesionCulto s where s.id = a.sesionId and a.residenteId = :residenteId and a.anulada = false and s.fecha between :desde and :hasta")
+    java.util.List<java.time.LocalDate> fechasAsistidas(@org.springframework.data.repository.query.Param("residenteId") Long residenteId,
+                                                       @org.springframework.data.repository.query.Param("desde") java.time.LocalDate desde,
+                                                       @org.springframework.data.repository.query.Param("hasta") java.time.LocalDate hasta);
+
     Page<AsistenciaCulto> findByResidenteIdAndAnuladaFalseOrderByRegistradoEnDesc(Long residenteId, Pageable pageable);
 }
