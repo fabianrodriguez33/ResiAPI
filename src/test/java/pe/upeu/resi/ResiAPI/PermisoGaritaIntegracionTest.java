@@ -272,6 +272,37 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
     }
 
     @Test
+    void fueraDelHorarioDeEnvioSeRechazaYLoPedidoSinConexionSeEvaluaConLaHoraDelTelefono() throws Exception {
+        var e = escenario();
+        var lunes = lunesAleatorio();
+        var viernes = lunes.plusDays(4);
+        // Viernes 15:00 (cerrado desde las 14:00): se rechaza con el horario.
+        fijarLima(viernes, 15, 0);
+        Instant ahora = reloj.instant();
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpoSolicitud("CORTO", ahora.plus(Duration.ofHours(3)), ahora.plus(Duration.ofHours(4)))))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("2:00 p. m.")));
+        // Pedido a las 13:00 sin conexión y enviado a las 15:00 (con red): vale la hora en que se creó.
+        Instant creada = viernes.atTime(13, 0).atZone(java.time.ZoneId.of("America/Lima")).toInstant();
+        String cuerpo = cuerpoSolicitud("CORTO", ahora.plus(Duration.ofHours(3)), ahora.plus(Duration.ofHours(4)));
+        cuerpo = cuerpo.substring(0, cuerpo.length() - 1) + ",\"claveCliente\":\"app-prueba-horario\",\"creadaEn\":\"" + creada + "\"}";
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isCreated());
+        // Sin clave de la app, la hora declarada no se usa.
+        var otro = escenario();
+        String sinClave = cuerpoSolicitud("CORTO", ahora.plus(Duration.ofHours(3)), ahora.plus(Duration.ofHours(4)));
+        sinClave = sinClave.substring(0, sinClave.length() - 1) + ",\"creadaEn\":\"" + creada + "\"}";
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), otro.residente()).contentType(MediaType.APPLICATION_JSON).content(sinClave))
+                .andExpect(status().isConflict());
+        // Sábado 18:30 abre de nuevo.
+        fijarLima(viernes.plusDays(1), 18, 30);
+        Instant sabado = reloj.instant();
+        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), otro.residente()).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpoSolicitud("CORTO", sabado.plus(Duration.ofHours(12)), sabado.plus(Duration.ofHours(13)))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void lasSolicitudesPendientesVencenCuandoPasaLaHoraDeSalida() throws Exception {
         var e = escenario();
         Instant t0 = base();

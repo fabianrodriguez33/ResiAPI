@@ -130,6 +130,15 @@ public class PermisoService {
             throw new Excepciones.Conflicto("El residente no está activo");
         }
         Instant ahora = reloj.instant();
+        // Una solicitud hecha sin conexión se evalúa con la hora en que se creó en el teléfono (hasta 7 días atrás, nunca en el futuro).
+        Instant momentoDeEnvio = ahora;
+        if (r.creadaEn() != null && r.claveCliente() != null && !r.claveCliente().isBlank()
+                && !r.creadaEn().isAfter(ahora) && r.creadaEn().isAfter(ahora.minus(Duration.ofDays(7)))) {
+            momentoDeEnvio = r.creadaEn();
+        }
+        if (!HorarioEnvio.abierto(momentoDeEnvio, zona)) {
+            throw new Excepciones.Conflicto(HorarioEnvio.MENSAJE);
+        }
         Map<String, String> errores = new java.util.LinkedHashMap<>();
         if (r.salida().isBefore(ahora.minus(Duration.ofMinutes(5)))) {
             errores.put("salida", "La salida no puede estar en el pasado");

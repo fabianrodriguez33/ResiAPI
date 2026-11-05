@@ -24,7 +24,9 @@ public final class PermisoDtos {
             @Size(max = 30, message = "Máximo 30 caracteres") String responsableCelular,
             @Size(max = 150, message = "Máximo 150 caracteres") String acompanante,
             /** Clave generada por la app al pedir sin conexión: evita duplicar la solicitud si el envío se repite. */
-            @Size(max = 40) String claveCliente) {
+            @Size(max = 40) String claveCliente,
+            /** Cuándo se creó la solicitud en el teléfono (si se pidió sin conexión): con eso se evalúa el horario de envío. */
+            Instant creadaEn) {
     }
 
     public record DecisionRequest(@NotNull(message = "Indique si se aprueba o se rechaza") Boolean aprobar,
