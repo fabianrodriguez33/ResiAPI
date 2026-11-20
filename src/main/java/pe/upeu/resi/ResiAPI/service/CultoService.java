@@ -79,6 +79,28 @@ public class CultoService {
         return sesiones.findByFechaOrderByInicioAsc(reloj.instant().atZone(zona).toLocalDate()).stream().map(this::aResponse).toList();
     }
 
+    /** Los cultos de una fecha cualquiera (el pastor los ve en su calendario). */
+    @Transactional(readOnly = true)
+    public List<SesionCultoResponse> deFecha(LocalDate fecha) {
+        return sesiones.findByFechaOrderByInicioAsc(fecha).stream().map(this::aResponse).toList();
+    }
+
+    /** Vuelve a abrir un culto cerrado, solo el mismo día, para registrar a quien faltó. Queda auditado. */
+    @Transactional
+    public SesionCultoResponse reabrir(Long sesionId) {
+        var s = sesiones.findByIdForUpdate(sesionId).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Sesión de culto no encontrada"));
+        if (s.getEstado() != EstadoSesion.CERRADA) {
+            throw new Excepciones.Conflicto("El culto ya está abierto");
+        }
+        if (!s.getFecha().equals(reloj.instant().atZone(zona).toLocalDate())) {
+            throw new Excepciones.Conflicto("Solo se puede abrir de nuevo un culto del mismo día");
+        }
+        s.setEstado(EstadoSesion.ABIERTA);
+        s.setCerradaEn(null);
+        auditoria.registrar(sesion.obtener().id(), "CULTO_REABIERTO", "sesion_culto", sesionId, null);
+        return aResponse(s);
+    }
+
     @Transactional(readOnly = true)
     public SesionCultoResponse obtener(Long id) {
         return aResponse(buscarSesion(id));

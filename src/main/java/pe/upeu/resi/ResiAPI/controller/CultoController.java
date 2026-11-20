@@ -52,6 +52,18 @@ public class CultoController {
         return cultos.deHoy();
     }
 
+    @GetMapping("/cultos/sesiones")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public List<SesionCultoResponse> deFecha(@RequestParam java.time.LocalDate fecha) {
+        return cultos.deFecha(fecha);
+    }
+
+    @PostMapping("/cultos/sesiones/{id}/reabrir")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public SesionCultoResponse reabrir(@PathVariable Long id) {
+        return cultos.reabrir(id);
+    }
+
     @GetMapping("/cultos/sesiones/{id}")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public SesionCultoResponse obtener(@PathVariable Long id) {
