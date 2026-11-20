@@ -76,13 +76,30 @@ class PermisoFamiliaIntegracionTest extends PruebaIntegracion {
                 .andReturn().getResponse().getContentAsString());
         assertEquals(1, lista.get("contenido").size());
         mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + id + "/decision"), f.padre()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"));
+        aprobarComoPastor(f.preceptor(), id);
         // No se puede decidir dos veces.
         mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + id + "/decision"), f.padre()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":false}"))
                 .andExpect(status().isConflict());
         // El pastor la ve en su lista de aprobados, lista para garita.
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes").param("estado", "APROBADO"), f.preceptor())).andExpect(status().isOk());
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), f.preceptor())).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
+    }
+
+    @Test
+    void elPastorRevisaElPermisoRechazaConMotivoYSoloElPuedeDecidir() throws Exception {
+        var f = familia(true);
+        Instant t0 = ahora();
+        long id = solicitar(f.residente(), cuerpo("CORTO", t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(3)), ""), "/api/v1/permisos/solicitudes", 201);
+        String url = "/api/v1/permisos/solicitudes/" + id + "/decision";
+        // El residente no decide; el pastor sí, y para rechazar debe dar el motivo.
+        mvc.perform(conToken(post(url), f.residente()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}")).andExpect(status().isForbidden());
+        mvc.perform(conToken(post(url), f.preceptor()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":false}")).andExpect(status().isBadRequest());
+        mvc.perform(conToken(post(url), f.preceptor()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":false,\"comentario\":\"Examen mañana\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("RECHAZADO")).andExpect(jsonPath("$.comentarioDecision").value("Examen mañana"));
+        // Ya no está en revisión: no se decide dos veces.
+        mvc.perform(conToken(post(url), f.preceptor()).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}")).andExpect(status().isConflict());
+        mvc.perform(conToken(get("/api/v1/notificaciones"), f.residente())).andExpect(jsonPath("$.contenido[0].titulo").value("Permiso rechazado"));
     }
 
     @Test
@@ -101,7 +118,7 @@ class PermisoFamiliaIntegracionTest extends PruebaIntegracion {
         var f = familia(true);
         Instant t0 = ahora();
         long corto = solicitar(f.residente(), cuerpo("CORTO", t0.plus(Duration.ofHours(2)), t0.plus(Duration.ofHours(4)), ""), "/api/v1/permisos/solicitudes", 201);
-        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + corto), f.residente())).andExpect(jsonPath("$.estado").value("APROBADO"))
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + corto), f.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"))
                 .andExpect(jsonPath("$.requiereApoderado").value(false));
         solicitar(f.residente(), cuerpo("LARGO", t0.plus(Duration.ofHours(6)), t0.plus(Duration.ofHours(9)), ""), "/api/v1/permisos/solicitudes", 201);
         // Pernoctar fuera siempre lo envía el padre, aunque el residente tenga el privilegio.
@@ -127,8 +144,8 @@ class PermisoFamiliaIntegracionTest extends PruebaIntegracion {
         String casa = ",\"residenteId\":" + f.residenteId() + ",\"responsableNombre\":\"Haydee Bazán Abanto\",\"responsableCelular\":\"+51 968 110 422\",\"acompanante\":\"\"";
 
         long id = solicitar(f.padre(), cuerpo("PERNOCTE", salida, retorno, casa), "/api/v1/familia/solicitudes", 201);
-        // Lo envía el padre: queda aprobado, con los datos de la casa y «Nadie» como acompañante por omisión.
-        mvc.perform(conToken(get("/api/v1/familia/solicitudes/" + id), f.padre())).andExpect(jsonPath("$.estado").value("APROBADO"))
+        // Lo envía el padre: queda en revisión del pastor, con los datos de la casa y «Nadie» como acompañante por omisión.
+        mvc.perform(conToken(get("/api/v1/familia/solicitudes/" + id), f.padre())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"))
                 .andExpect(jsonPath("$.origen").value("APODERADO")).andExpect(jsonPath("$.tipo").value("PERNOCTE"))
                 .andExpect(jsonPath("$.responsableNombre").value("Haydee Bazán Abanto")).andExpect(jsonPath("$.responsableCelular").value("+51 968 110 422"))
                 .andExpect(jsonPath("$.acompanante").value("Nadie"));

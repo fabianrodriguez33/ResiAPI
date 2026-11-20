@@ -54,7 +54,8 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         String token = leer(mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/enlace-apoderado"), e.preceptor()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("token").asString();
         mvc.perform(post("/api/v1/publico/apoderado/" + token).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}")).andExpect(status().isOk());
-        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("APROBADO"));
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"));
+        aprobarComoPastor(e.preceptor(), id);
         return id;
     }
 
@@ -107,8 +108,9 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         mvc.perform(get("/api/v1/publico/apoderado/" + token)).andExpect(status().isConflict());
         mvc.perform(get("/api/v1/publico/apoderado/token-inventado")).andExpect(status().isNotFound());
 
-        // Con el visto bueno del apoderado queda aprobado y el pastor lo ve en su lista.
-        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("APROBADO"));
+        // Con el visto bueno del apoderado pasa a revisión del pastor; cuando él lo aprueba, aparece en su lista de aprobados.
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"));
+        aprobarComoPastor(e.preceptor(), id);
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes").param("estado", "APROBADO"), e.preceptor())).andExpect(status().isOk());
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.preceptor())).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
 

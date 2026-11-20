@@ -42,6 +42,14 @@ public abstract class PruebaIntegracion {
     }
 
     /** Fija el reloj en una hora local de Lima (UTC-5, sin horario de verano). */
+    /** El pastor aprueba un permiso en revisión: queda APROBADO y disponible para garita. */
+    protected void aprobarComoPastor(String tokenPastor, long id) throws Exception {
+        mvc.perform(conToken(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/permisos/solicitudes/" + id + "/decision"), tokenPastor)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.estado").value("APROBADO"));
+    }
+
     protected void fijarLima(java.time.LocalDate fecha, int hora, int minuto) {
         reloj.fijar(fecha.atTime(hora, minuto).atZone(java.time.ZoneId.of("America/Lima")).toInstant());
     }

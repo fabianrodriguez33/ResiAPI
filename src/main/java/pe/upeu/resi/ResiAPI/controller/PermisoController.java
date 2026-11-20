@@ -92,6 +92,12 @@ public class PermisoController {
         return permisos.deResidentesSuspendidos();
     }
 
+    @PostMapping("/solicitudes/{id}/decision")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public SolicitudResponse decidir(@PathVariable Long id, @Valid @RequestBody DecisionRequest request) {
+        return permisos.decidirComoPastor(id, request.aprobar(), request.comentario());
+    }
+
     @PostMapping("/solicitudes/{id}/anular")
     @PreAuthorize("hasRole('PRECEPTOR')")
     public SolicitudResponse anular(@PathVariable Long id, @Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.PermisoDtos.AnulacionRequest request) {
