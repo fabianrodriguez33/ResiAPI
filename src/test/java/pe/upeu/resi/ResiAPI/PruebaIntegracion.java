@@ -50,6 +50,10 @@ public abstract class PruebaIntegracion {
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.estado").value("APROBADO"));
     }
 
+    protected String celularUnico() {
+        return "9" + (10_000_000 + new java.util.Random().nextInt(89_000_000));
+    }
+
     protected void fijarLima(java.time.LocalDate fecha, int hora, int minuto) {
         reloj.fijar(fecha.atTime(hora, minuto).atZone(java.time.ZoneId.of("America/Lima")).toInstant());
     }

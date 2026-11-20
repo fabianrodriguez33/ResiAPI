@@ -57,6 +57,9 @@ public class ResidenteService {
         var res = new Residente();
         usuarioService.asignarIdentidad(usuario, r.dni(), r.fechaNacimiento());
         if (r.telefono() != null && !r.telefono().isBlank()) {
+            if (usuarios.existsByTelefono(r.telefono().trim())) {
+                throw new Excepciones.Conflicto("Ese celular ya está registrado en otra cuenta");
+            }
             usuario.setTelefono(r.telefono().trim());
         }
         res.setUsuarioId(usuario.getId());
@@ -112,7 +115,11 @@ public class ResidenteService {
             usuario.setNombreCompleto(r.nombreCompleto().trim());
         }
         if (r.telefono() != null) {
-            usuario.setTelefono(r.telefono().isBlank() ? null : r.telefono().trim());
+            String nuevoTel = r.telefono().isBlank() ? null : r.telefono().trim();
+            if (nuevoTel != null && usuarios.existsByTelefonoAndIdNot(nuevoTel, usuario.getId())) {
+                throw new Excepciones.Conflicto("Ese celular ya está registrado en otra cuenta");
+            }
+            usuario.setTelefono(nuevoTel);
         }
         if (r.codigo() != null && !r.codigo().equals(res.getCodigo())) {
             if (residentes.existsByCodigo(r.codigo())) {

@@ -228,6 +228,9 @@ public class ReservaAlimentacionService {
         Instant ahora = reloj.instant();
         reserva.setEstado(aprobar ? EstadoReserva.RESERVADA : EstadoReserva.RECHAZADA);
         reserva.setComentarioDecision(limpiar(comentario));
+        if (!aprobar) {
+            reserva.setMotivoCancelacion(limpiar(comentario)); // el residente lo ve junto a su reserva
+        }
         reserva.setDecididaPor(sesion.obtener().id());
         reserva.setDecididaEn(ahora);
         auditoria.registrar(sesion.obtener().id(), aprobar ? "RESERVA_APROBADA" : "RESERVA_RECHAZADA", "reserva_alimentacion", id, reserva.getComentarioDecision());

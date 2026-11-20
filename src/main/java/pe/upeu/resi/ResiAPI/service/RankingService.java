@@ -19,7 +19,8 @@ import pe.upeu.resi.ResiAPI.repository.ResidenteRepository;
 /**
  * Posición del residente entre los residentes activos en lo que va del ciclo: cultos asistidos y promedio de limpieza.
  * Siempre se calcula sobre los registros originales, así que un registro corregido o anulado cambia el puesto al instante.
- * El ciclo sale de la configuración ({@code ciclo.inicio} y {@code ciclo.fin}); si no está, se usa el semestre en curso.
+ * El ciclo sale de la configuración ({@code ciclo.inicio} y {@code ciclo.fin}); si no está, se usa el semestre en curso
+ * (I: marzo a julio; II: agosto a fin de febrero).
  * Empates: comparten puesto (1, 1, 3...).
  */
 @Service
@@ -38,8 +39,11 @@ public class RankingService {
     public RankingResponse miRanking() {
         Long yo = residenteService.residenteActual().getId();
         LocalDate hoy = reloj.instant().atZone(zona).toLocalDate();
-        LocalDate desde = fecha("ciclo.inicio").orElse(hoy.getMonthValue() >= 8 ? LocalDate.of(hoy.getYear(), 8, 1) : LocalDate.of(hoy.getYear(), 3, 1));
-        LocalDate hasta = fecha("ciclo.fin").orElse(hoy.getMonthValue() >= 8 ? LocalDate.of(hoy.getYear(), 12, 31) : LocalDate.of(hoy.getYear(), 7, 31));
+        // Sin configuración: ciclo I de marzo a julio y ciclo II de agosto a fin de febrero (enero y febrero cierran el II del año anterior).
+        int anioII = hoy.getMonthValue() <= 2 ? hoy.getYear() - 1 : hoy.getYear();
+        boolean segundo = hoy.getMonthValue() >= 8 || hoy.getMonthValue() <= 2;
+        LocalDate desde = fecha("ciclo.inicio").orElse(segundo ? LocalDate.of(anioII, 8, 1) : LocalDate.of(hoy.getYear(), 3, 1));
+        LocalDate hasta = fecha("ciclo.fin").orElse(segundo ? LocalDate.of(anioII + 1, 3, 1).minusDays(1) : LocalDate.of(hoy.getYear(), 7, 31));
         List<Long> activos = residentes.findAll().stream().filter(Residente::isActivo).map(Residente::getId).toList();
 
         Map<Long, Double> cultos = new HashMap<>();

@@ -76,7 +76,11 @@ public class PerfilService {
             }
         }
         if (telefono != null) {
-            u.setTelefono(telefono.isBlank() ? null : telefono.trim());
+            String nuevo = telefono.isBlank() ? null : telefono.trim();
+            if (nuevo != null && usuarios.existsByTelefonoAndIdNot(nuevo, u.getId())) {
+                throw new Excepciones.Conflicto("Ese celular ya está registrado en otra cuenta");
+            }
+            u.setTelefono(nuevo);
         }
         if (nacimiento != null) {
             validarNacimiento(nacimiento);

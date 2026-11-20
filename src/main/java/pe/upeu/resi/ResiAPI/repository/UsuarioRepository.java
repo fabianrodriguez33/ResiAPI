@@ -8,6 +8,11 @@ import pe.upeu.resi.ResiAPI.entity.Usuario;
 
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
+    boolean existsByTelefonoAndIdNot(String telefono, Long id);
+
+    boolean existsByTelefono(String telefono);
+
+
     Optional<Usuario> findByUsername(String username);
 
     java.util.List<Usuario> findByRolAndActivoTrue(pe.upeu.resi.ResiAPI.enums.Rol rol);

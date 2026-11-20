@@ -27,15 +27,34 @@ class PerfilResidenteIntegracionTest extends PruebaIntegracion {
         String token = tokenDe(ultimoUsuario);
         var antes = leer(mvc.perform(conToken(get("/api/v1/residentes/yo"), token)).andReturn().getResponse().getContentAsString());
 
+        String celular = celularUnico();
         // Carrera, ciclo y nacimiento los gestiona la administración: si llegan, no se aplican.
         mvc.perform(conToken(patch("/api/v1/residentes/yo"), token).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"julio@upeu.edu.pe\",\"telefono\":\"968110422\",\"fechaNacimiento\":\"2004-05-17\",\"carrera\":\"Ingeniería de Sistemas\",\"ciclo\":7}"))
+                .content("{\"email\":\"julio@upeu.edu.pe\",\"telefono\":\"" + celular + "\",\"fechaNacimiento\":\"2004-05-17\",\"carrera\":\"Ingeniería de Sistemas\",\"ciclo\":7}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.email").value("julio@upeu.edu.pe")).andExpect(jsonPath("$.emailVerificado").value(false))
-                .andExpect(jsonPath("$.telefono").value("968110422")).andExpect(jsonPath("$.ciclo").doesNotExist()).andExpect(jsonPath("$.carrera").doesNotExist())
+                .andExpect(jsonPath("$.telefono").value(celular)).andExpect(jsonPath("$.ciclo").doesNotExist()).andExpect(jsonPath("$.carrera").doesNotExist())
                 .andExpect(jsonPath("$.fechaNacimiento").doesNotExist());
         assertEquals(200, editar(token, "{\"email\":\"\"}"));
-        mvc.perform(conToken(get("/api/v1/residentes/yo"), token)).andExpect(jsonPath("$.email").doesNotExist()).andExpect(jsonPath("$.telefono").value("968110422"))
+        mvc.perform(conToken(get("/api/v1/residentes/yo"), token)).andExpect(jsonPath("$.email").doesNotExist()).andExpect(jsonPath("$.telefono").value(celular))
                 .andExpect(jsonPath("$.codigo").value(antes.get("codigo").asString()));
+    }
+
+    @Test
+    void elCelularTiene9DigitosYNoSeRepiteYElCorreoTieneFormatoValido() throws Exception {
+        String admin = tokenDeRol(Rol.ADMINISTRADOR);
+        crearResidente(admin);
+        String a = tokenDe(ultimoUsuario);
+        crearResidente(admin);
+        String b = tokenDe(ultimoUsuario);
+        String celular = celularUnico();
+        assertEquals(400, editar(a, "{\"telefono\":\"12345678\"}"), "8 dígitos");
+        assertEquals(400, editar(a, "{\"telefono\":\"1234567890\"}"), "10 dígitos");
+        assertEquals(400, editar(a, "{\"telefono\":\"96811042a\"}"), "con letras");
+        assertEquals(400, editar(a, "{\"email\":\"sin-arroba\"}"));
+        assertEquals(400, editar(a, "{\"email\":\"a@b\"}"), "sin dominio");
+        assertEquals(200, editar(a, "{\"telefono\":\"" + celular + "\",\"email\":\"nombre@upeu.edu.pe\"}"));
+        assertEquals(409, editar(b, "{\"telefono\":\"" + celular + "\"}"), "otro usuario ya lo tiene");
+        assertEquals(200, editar(a, "{\"telefono\":\"" + celular + "\"}"), "el mismo usuario puede guardarlo de nuevo");
     }
 
     @Test
