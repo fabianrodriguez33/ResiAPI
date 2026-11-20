@@ -69,4 +69,35 @@ public class ReservaAlimentacionController {
     public ReservaResponse decidir(@PathVariable Long id, @Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.PermisoDtos.DecisionRequest request) {
         return reservas.decidir(id, request.aprobar(), request.comentario());
     }
+
+    public record CierreRequest(@jakarta.validation.constraints.NotNull java.time.LocalDate fecha, @jakarta.validation.constraints.NotBlank String grupo) {
+    }
+
+    /** Cierra las reservas de una comida (ALMUERZO, CENA o DESAYUNO) de una fecha. Devuelve cuántas pendientes se cancelaron. */
+    @PostMapping("/pastor")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ReservaResponse crearComoPastor(@Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.ReservaDtos.ReservaPastorRequest request) {
+        return reservas.crearComoPastor(request);
+    }
+
+    @PostMapping("/cerrar")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public java.util.Map<String, Integer> cerrar(@Valid @RequestBody CierreRequest request) {
+        return java.util.Map.of("canceladas", reservas.cerrar(request.fecha(), request.grupo()));
+    }
+
+    @GetMapping("/cierres")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.List<String> cierres(@RequestParam java.time.LocalDate fecha) {
+        return reservas.cerradas(fecha);
+    }
+
+    @GetMapping(value = "/exportar", produces = "text/csv;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public org.springframework.http.ResponseEntity<byte[]> exportar(@RequestParam java.time.LocalDate fecha, @RequestParam String grupo) {
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"reservas-" + grupo.toLowerCase() + "-" + fecha + ".csv\"")
+                .body(reservas.exportar(fecha, grupo).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
 }

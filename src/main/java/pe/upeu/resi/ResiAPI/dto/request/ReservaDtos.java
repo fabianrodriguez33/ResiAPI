@@ -15,6 +15,15 @@ public final class ReservaDtos {
      * Reserva de una comida. {@code fecha} es el día en que se sirve. El motivo es obligatorio; «curso o actividad» y la
      * observación son opcionales (el desayuno frío no lleva curso).
      */
+    /** Reserva creada por el pastor o monitor para un residente: queda aprobada. */
+    public record ReservaPastorRequest(
+            @NotNull(message = "Elige al residente") Long residenteId,
+            @NotNull(message = "Elige el tipo de comida") TipoReserva tipo,
+            @NotNull(message = "Indica el día de la comida") LocalDate fecha,
+            @NotBlank(message = "El motivo es obligatorio") @Size(max = 300, message = "Máximo 300 caracteres") String motivo,
+            @Size(max = 100, message = "Máximo 100 caracteres") String curso) {
+    }
+
     public record ReservaRequest(
             @NotNull(message = "Elige el tipo de comida") TipoReserva tipo,
             @NotNull(message = "Indica el día de la comida") LocalDate fecha,

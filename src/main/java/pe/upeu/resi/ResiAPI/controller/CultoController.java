@@ -32,7 +32,7 @@ public class CultoController {
     public record AbrirSesionRequest(@NotNull(message = "El tipo de culto es obligatorio") TipoCulto tipo) {
     }
 
-    public record RegistrarAsistenciaRequest(@NotBlank(message = "El QR es obligatorio") @Size(max = 120) String qr) {
+    public record RegistrarAsistenciaRequest(@Size(max = 120) String qr, @jakarta.validation.constraints.Pattern(regexp = "^(\\d{9})?$", message = "El código universitario tiene 9 dígitos") String codigo) {
     }
 
     public record AnularRequest(@NotBlank(message = "El motivo es obligatorio") @Size(max = 300) String motivo) {
@@ -64,6 +64,15 @@ public class CultoController {
         return cultos.reabrir(id);
     }
 
+    @GetMapping(value = "/cultos/sesiones/{id}/exportar", produces = "text/csv;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public org.springframework.http.ResponseEntity<byte[]> exportar(@PathVariable Long id) {
+        var s = cultos.obtener(id);
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"culto-" + s.tipo().name().toLowerCase() + "-" + s.fecha() + ".csv\"")
+                .body(cultos.exportarPresentes(id).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     @GetMapping("/cultos/sesiones/{id}")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public SesionCultoResponse obtener(@PathVariable Long id) {
@@ -74,7 +83,12 @@ public class CultoController {
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     @ResponseStatus(HttpStatus.CREATED)
     public AsistenciaResponse registrar(@PathVariable Long id, @Valid @RequestBody RegistrarAsistenciaRequest request) {
-        return cultos.registrar(id, request.qr());
+        boolean conCodigo = request.codigo() != null && !request.codigo().isBlank();
+        boolean conQr = request.qr() != null && !request.qr().isBlank();
+        if (conCodigo == conQr) {
+            throw new pe.upeu.resi.ResiAPI.exception.Excepciones.SolicitudInvalida("Indica el QR o el código universitario");
+        }
+        return conCodigo ? cultos.registrarPorCodigo(id, request.codigo()) : cultos.registrar(id, request.qr());
     }
 
     @GetMapping("/cultos/sesiones/{id}/presentes")

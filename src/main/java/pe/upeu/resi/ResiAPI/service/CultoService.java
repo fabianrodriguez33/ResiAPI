@@ -108,17 +108,35 @@ public class CultoService {
 
     @Transactional
     public AsistenciaResponse registrar(Long sesionId, String contenidoQr) {
-        var s = sesiones.findByIdForUpdate(sesionId).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Sesión de culto no encontrada"));
-        if (s.getEstado() != EstadoSesion.ABIERTA) {
-            throw new Excepciones.Conflicto("La sesión de culto está cerrada");
-        }
+        var s = sesionAbierta(sesionId);
         var resolucion = qr.resolver(contenidoQr);
         switch (resolucion.estado()) {
             case INVALIDO -> throw new Excepciones.SolicitudInvalida("El código QR no es válido");
             case REVOCADO -> throw new Excepciones.Conflicto("El código QR fue revocado");
             default -> { }
         }
-        var residente = resolucion.residente();
+        return registrarResidente(s, resolucion.residente());
+    }
+
+    /** Código manual: el pastor escribe el código universitario cuando el QR no se puede leer. */
+    @Transactional
+    public AsistenciaResponse registrarPorCodigo(Long sesionId, String codigo) {
+        var s = sesionAbierta(sesionId);
+        var residente = residentes.findByCodigo(codigo.trim())
+                .orElseThrow(() -> new Excepciones.SolicitudInvalida("No hay un residente con ese código", java.util.Map.of("codigo", "No hay un residente con ese código")));
+        return registrarResidente(s, residente);
+    }
+
+    private pe.upeu.resi.ResiAPI.entity.SesionCulto sesionAbierta(Long sesionId) {
+        var s = sesiones.findByIdForUpdate(sesionId).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Sesión de culto no encontrada"));
+        if (s.getEstado() != EstadoSesion.ABIERTA) {
+            throw new Excepciones.Conflicto("La sesión de culto está cerrada");
+        }
+        return s;
+    }
+
+    private AsistenciaResponse registrarResidente(pe.upeu.resi.ResiAPI.entity.SesionCulto s, pe.upeu.resi.ResiAPI.entity.Residente residente) {
+        Long sesionId = s.getId();
         if (residente == null || !residente.isActivo()) {
             throw new Excepciones.Conflicto("El residente no está activo");
         }
@@ -143,6 +161,18 @@ public class CultoService {
         a = asistencias.save(a);
         auditoria.registrar(a.getRegistradoPor(), "ASISTENCIA_REGISTRADA", "asistencia_culto", a.getId(), "residente=" + residente.getId());
         return aResponse(a, s);
+    }
+
+    /** CSV (separado por «;», con BOM para Excel) de los presentes de un culto. */
+    @Transactional(readOnly = true)
+    public String exportarPresentes(Long sesionId) {
+        var s = buscarSesion(sesionId);
+        var sb = new StringBuilder("\uFEFFCódigo;Nombre;Hora;Tardanza\r\n");
+        for (var a : presentes(sesionId)) {
+            sb.append(Csv.celda(a.codigo())).append(';').append(Csv.celda(a.nombreCompleto())).append(';')
+                    .append(Csv.celda(a.registradoEn().atZone(zona).toLocalTime().withNano(0).toString())).append(';').append(a.despuesDelCorte() ? "Sí" : "No").append("\r\n");
+        }
+        return sb.toString();
     }
 
     @Transactional(readOnly = true)

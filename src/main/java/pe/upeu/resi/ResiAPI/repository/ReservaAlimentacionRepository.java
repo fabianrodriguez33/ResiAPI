@@ -45,6 +45,10 @@ public interface ReservaAlimentacionRepository extends JpaRepository<ReservaAlim
     @Query("select r from ReservaAlimentacion r where r.fecha = :fecha and r.tipo in :tipos order by r.creadaEn asc, r.id asc")
     List<ReservaAlimentacion> delDia(@Param("fecha") LocalDate fecha, @Param("tipos") Collection<TipoReserva> tipos);
 
+    /** Reservas de una fecha que siguen pendientes, para cancelarlas al cerrar. */
+    @Query("select r from ReservaAlimentacion r where r.fecha = :fecha and r.estado = 'PENDIENTE' and r.tipo in :tipos")
+    List<ReservaAlimentacion> pendientesDelDia(@Param("fecha") LocalDate fecha, @Param("tipos") Collection<TipoReserva> tipos);
+
     Page<ReservaAlimentacion> findByResidenteIdOrderByFechaDescIdDesc(Long residenteId, Pageable pageable);
 
     @Query("select s from SolicitudPermiso s where s.residenteId = :residenteId and s.estado = :estado and s.salidaSolicitada < :fin and s.retornoAutorizado >= :inicio order by s.salidaSolicitada asc")
