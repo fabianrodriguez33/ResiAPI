@@ -25,7 +25,8 @@ public final class PermisoResponses {
                                     String destino, Instant salidaSolicitada, Instant retornoSolicitado, Instant retornoAutorizado,
                                     EstadoSolicitud estado, boolean requiereApoderado, Instant decididoEn, String comentarioDecision,
                                     Instant creadoEn, List<AmpliacionResponse> ampliaciones, List<JustificacionResponse> justificaciones,
-                                    pe.upeu.resi.ResiAPI.enums.OrigenSolicitud origen, String responsableNombre, String responsableCelular, String acompanante) {
+                                    pe.upeu.resi.ResiAPI.enums.OrigenSolicitud origen, String responsableNombre, String responsableCelular, String acompanante,
+                                    Instant garitaSalida, Instant garitaEntrada) {
     }
 
     /** Hijo/a de un apoderado, con lo que necesita para elegirlo y ver cuántos permisos esperan su aceptación. */

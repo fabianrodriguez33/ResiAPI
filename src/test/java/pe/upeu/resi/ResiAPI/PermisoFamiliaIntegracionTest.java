@@ -121,9 +121,11 @@ class PermisoFamiliaIntegracionTest extends PruebaIntegracion {
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + corto), f.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"))
                 .andExpect(jsonPath("$.requiereApoderado").value(false));
         solicitar(f.residente(), cuerpo("LARGO", t0.plus(Duration.ofHours(6)), t0.plus(Duration.ofHours(9)), ""), "/api/v1/permisos/solicitudes", 201);
-        // Pernoctar fuera siempre lo envía el padre, aunque el residente tenga el privilegio.
-        solicitar(f.residente(), cuerpo("PERNOCTE", t0.plus(Duration.ofDays(2)), t0.plus(Duration.ofDays(5)),
-                ",\"responsableNombre\":\"Tía\",\"responsableCelular\":\"+51 968 110 422\""), "/api/v1/permisos/solicitudes", 403);
+        // Pernoctar fuera siempre espera el visto bueno del padre, aunque el residente tenga el privilegio.
+        long pernocte = solicitar(f.residente(), cuerpo("PERNOCTE", t0.plus(Duration.ofDays(2)), t0.plus(Duration.ofDays(5)),
+                ",\"responsableNombre\":\"Tía\",\"responsableCelular\":\"+51 968 110 422\""), "/api/v1/permisos/solicitudes", 201);
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + pernocte), f.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_APODERADO"))
+                .andExpect(jsonPath("$.requiereApoderado").value(true));
     }
 
     @Test

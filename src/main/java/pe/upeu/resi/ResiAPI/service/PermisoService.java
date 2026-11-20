@@ -93,15 +93,14 @@ public class PermisoService {
 
     // ------------------------------------------------------------------ solicitud
 
-    /** Solicitud enviada por el propio residente: solo corto y largo. Sin el privilegio, pasa primero por su apoderado. */
+    /** Solicitud enviada por el propio residente. Sin el privilegio (y siempre para pernoctar), pasa primero por su apoderado. */
     @Transactional
     public SolicitudResponse crear(SolicitudRequest r) {
         Residente residente = residenteService.residenteActual();
         habilitacion.exigirHabilitado(residente, true);
-        if (r.tipo() == TipoPermiso.PERNOCTE) {
-            throw new Excepciones.Prohibido("Los permisos para pernoctar fuera los envía tu padre, madre o apoderado desde su cuenta");
-        }
-        boolean requiereApoderado = !residente.isPuedeSolicitarSolo() && config.booleano("permiso.apoderado.requerido", true);
+        // Pernoctar fuera siempre pasa por el apoderado, aunque el residente tenga el privilegio para corto y largo.
+        boolean requiereApoderado = r.tipo() == TipoPermiso.PERNOCTE
+                || (!residente.isPuedeSolicitarSolo() && config.booleano("permiso.apoderado.requerido", true));
         if (requiereApoderado && vinculos.findByResidenteId(residente.getId()).isEmpty()) {
             throw new Excepciones.Conflicto("No tienes un apoderado registrado; comunícate con administración");
         }
@@ -731,7 +730,13 @@ public class PermisoService {
         return new SolicitudResponse(s.getId(), residente.getId(), residente.getCodigo(), nombre, s.getTipo(), s.getMotivo(), s.getDestino(),
                 s.getSalidaSolicitada(), s.getRetornoSolicitado(), s.getRetornoAutorizado(), s.getEstado(), s.isRequiereApoderado(),
                 s.getDecididoEn(), s.getComentarioDecision(), s.getCreadoEn(), amp, jus,
-                s.getOrigen(), s.getResponsableNombre(), s.getResponsableCelular(), s.getAcompanante());
+                s.getOrigen(), s.getResponsableNombre(), s.getResponsableCelular(), s.getAcompanante(),
+                marcaDeGarita(s.getId(), TipoMovimiento.SALIDA), marcaDeGarita(s.getId(), TipoMovimiento.RETORNO));
+    }
+
+    /** Hora en que garita registró la salida o la entrada con este permiso (null si aún no ocurrió). */
+    private Instant marcaDeGarita(Long solicitudId, TipoMovimiento tipo) {
+        return movimientos.findFirstBySolicitudIdAndTipoAndAnuladoFalseOrderByRegistradoEnAsc(solicitudId, tipo).map(m -> m.getRegistradoEn()).orElse(null);
     }
 
     private AmpliacionResponse aResponse(AmpliacionPermiso a) {
