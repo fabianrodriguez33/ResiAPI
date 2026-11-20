@@ -21,7 +21,11 @@ import pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.AdvertenciaPermiso;
 import pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.EstadoOferta;
 import pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.OfertaItem;
 import pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.OfertaResponse;
+import pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.ReservaPastorResponse;
 import pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.ReservaResponse;
+import pe.upeu.resi.ResiAPI.enums.Rol;
+import pe.upeu.resi.ResiAPI.repository.ResidenteRepository;
+import pe.upeu.resi.ResiAPI.repository.UsuarioRepository;
 import pe.upeu.resi.ResiAPI.entity.DiaComedor;
 import pe.upeu.resi.ResiAPI.entity.ReservaAlimentacion;
 import pe.upeu.resi.ResiAPI.entity.SolicitudPermiso;
@@ -45,13 +49,19 @@ import pe.upeu.resi.ResiAPI.service.HorarioReservas.Ventana;
 public class ReservaAlimentacionService {
 
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter FECHA_CORTA = DateTimeFormatter.ofPattern("dd/MM");
     private static final DateTimeFormatter FECHA_HORA = DateTimeFormatter.ofPattern("dd/MM HH:mm");
     private static final Set<TipoReserva> CENAS = EnumSet.of(TipoReserva.CENA_TAPER, TipoReserva.CENA_SEGUNDO_TURNO);
+    /** Una reserva pendiente de revisión o ya aprobada ocupa el cupo del residente. */
+    private static final Set<EstadoReserva> ACTIVAS = EnumSet.of(EstadoReserva.PENDIENTE, EstadoReserva.RESERVADA);
 
     private final ReservaAlimentacionRepository reservas;
     private final DiaComedorRepository dias;
     private final ResidenteService residenteService;
     private final AuditoriaService auditoria;
+    private final NotificacionService avisos;
+    private final ResidenteRepository residentes;
+    private final UsuarioRepository usuarios;
     private final SesionActual sesion;
     private final Clock reloj;
     private final ZoneId zona;
@@ -73,7 +83,7 @@ public class ReservaAlimentacionService {
             }
         }
         var activas = fechas.isEmpty() ? List.<ReservaAlimentacion>of()
-                : reservas.findByResidenteIdAndFechaInAndEstado(residente.getId(), fechas, EstadoReserva.RESERVADA);
+                : reservas.findByResidenteIdAndFechaInAndEstadoIn(residente.getId(), fechas, ACTIVAS);
         for (TipoReserva tipo : TipoReserva.values()) {
             LocalDate fecha = HorarioReservas.fechaQueSePideHoy(tipo, hoy);
             if (!HorarioReservas.seSirve(tipo, fecha)) {
@@ -134,7 +144,7 @@ public class ReservaAlimentacionService {
                     + HORA.format(HorarioReservas.cierra(r.tipo(), fecha, zona).atZone(zona)));
             default -> { }
         }
-        if (reservas.existeEnTipos(residente.getId(), fecha, EstadoReserva.RESERVADA, grupo(r.tipo()))) {
+        if (reservas.existeEnTipos(residente.getId(), fecha, ACTIVAS, grupo(r.tipo()))) {
             throw new Excepciones.Conflicto(r.tipo().esCena()
                     ? "Ya tienes una reserva de cena para ese día; cancélala para reservar la otra"
                     : "Ya tienes esa reserva para ese día");
@@ -146,7 +156,7 @@ public class ReservaAlimentacionService {
         reserva.setMotivo(r.motivo().trim());
         reserva.setCurso(limpiar(r.curso()));
         reserva.setObservacion(limpiar(r.observacion()));
-        reserva.setEstado(EstadoReserva.RESERVADA);
+        reserva.setEstado(EstadoReserva.PENDIENTE);
         reserva.setCreadaPor(sesion.obtener().id());
         reserva.setCreadaEn(ahora);
         try {
@@ -156,6 +166,7 @@ public class ReservaAlimentacionService {
             throw new Excepciones.Conflicto("Ya tienes una reserva activa para ese día");
         }
         auditoria.registrar(sesion.obtener().id(), "RESERVA_CREADA", "reserva_alimentacion", reserva.getId(), r.tipo() + " " + fecha);
+        avisos.aRol(Rol.PRECEPTOR, "Reserva por revisar", avisos.nombreDe(residente.getId()) + " pidió " + nombreTipo(r.tipo()) + " para el " + FECHA_CORTA.format(fecha) + ".");
         return aResponse(reserva, advertenciaPermiso(residente.getId(), fecha));
     }
 
@@ -169,8 +180,8 @@ public class ReservaAlimentacionService {
                 .orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Reserva no encontrada"));
         reservas.bloquearDia(clave(fecha));
         var reserva = reservas.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Reserva no encontrada"));
-        if (reserva.getEstado() != EstadoReserva.RESERVADA) {
-            throw new Excepciones.Conflicto("Esa reserva ya está cancelada");
+        if (!ACTIVAS.contains(reserva.getEstado())) {
+            throw new Excepciones.Conflicto("Esa reserva ya no está activa");
         }
         Instant ahora = reloj.instant();
         if (HorarioReservas.ventana(reserva.getTipo(), fecha, ahora, zona) == Ventana.VENCIDA) {
@@ -181,6 +192,48 @@ public class ReservaAlimentacionService {
         reserva.setCanceladaPor(sesion.obtener().id());
         reserva.setCanceladaEn(ahora);
         auditoria.registrar(sesion.obtener().id(), "RESERVA_CANCELADA", "reserva_alimentacion", reserva.getId(), reserva.getTipo() + " " + fecha);
+        return aResponse(reserva, null);
+    }
+
+    // ------------------------------------------------------------------ pastor / monitor
+
+    /** Las reservas de una fecha (todas, o solo de un tipo); el pastor las revisa desde aquí. */
+    @Transactional(readOnly = true)
+    public List<ReservaPastorResponse> delDia(LocalDate fecha, TipoReserva tipo) {
+        var tipos = tipo == null ? List.of(TipoReserva.values()) : List.of(tipo);
+        return reservas.delDia(fecha, tipos).stream().map(r -> {
+            var res = residentes.findById(r.getResidenteId()).orElseThrow();
+            String nombre = usuarios.findById(res.getUsuarioId()).map(u -> u.getNombreCompleto()).orElse("-");
+            return new ReservaPastorResponse(r.getId(), r.getResidenteId(), nombre, res.getCodigo(), r.getTipo(), r.getFecha(), r.getMotivo(),
+                    r.getCurso(), r.getObservacion(), r.getEstado(), r.getCreadaEn(), r.getComentarioDecision());
+        }).toList();
+    }
+
+    /** El pastor (o monitor) aprueba o rechaza una reserva pendiente; rechazar exige el motivo, que ve el residente. */
+    @Transactional
+    public ReservaResponse decidir(Long id, boolean aprobar, String comentario) {
+        LocalDate fecha = reservas.findById(id).map(ReservaAlimentacion::getFecha)
+                .orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Reserva no encontrada"));
+        reservas.bloquearDia(clave(fecha));
+        var reserva = reservas.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Reserva no encontrada"));
+        if (reserva.getEstado() != EstadoReserva.PENDIENTE) {
+            throw new Excepciones.Conflicto("Esta reserva ya no está pendiente");
+        }
+        if (!aprobar && (comentario == null || comentario.isBlank())) {
+            throw new Excepciones.SolicitudInvalida("Datos inválidos", Map.of("comentario", "El motivo del rechazo es obligatorio"));
+        }
+        dias.findById(fecha).filter(DiaComedor::isCerrado).ifPresent(d -> {
+            throw new Excepciones.Conflicto("El comedor está cerrado ese día");
+        });
+        Instant ahora = reloj.instant();
+        reserva.setEstado(aprobar ? EstadoReserva.RESERVADA : EstadoReserva.RECHAZADA);
+        reserva.setComentarioDecision(limpiar(comentario));
+        reserva.setDecididaPor(sesion.obtener().id());
+        reserva.setDecididaEn(ahora);
+        auditoria.registrar(sesion.obtener().id(), aprobar ? "RESERVA_APROBADA" : "RESERVA_RECHAZADA", "reserva_alimentacion", id, reserva.getComentarioDecision());
+        String que = nombreTipo(reserva.getTipo()) + " del " + FECHA_CORTA.format(fecha);
+        avisos.alResidente(reserva.getResidenteId(), aprobar ? "Reserva aprobada" : "Reserva rechazada",
+                aprobar ? "Tu reserva de " + que + " fue aprobada." : "Tu reserva de " + que + " fue rechazada. Motivo: " + reserva.getComentarioDecision());
         return aResponse(reserva, null);
     }
 
@@ -202,6 +255,15 @@ public class ReservaAlimentacionService {
     /** Clave del bloqueo de PostgreSQL para una fecha de comida. */
     static long clave(LocalDate fecha) {
         return (1L << 40) + fecha.toEpochDay();
+    }
+
+    private static String nombreTipo(TipoReserva tipo) {
+        return switch (tipo) {
+            case ALMUERZO -> "almuerzo";
+            case DESAYUNO_FRIO -> "desayuno";
+            case CENA_TAPER -> "cena en táper";
+            case CENA_SEGUNDO_TURNO -> "cena de segundo turno";
+        };
     }
 
     private static String limpiar(String texto) {

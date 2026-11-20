@@ -125,7 +125,7 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         fijarLima(lunes, 10, 0);
 
         reservar(res, "ALMUERZO", lunes, ",\"curso\":\"Cálculo II\",\"observacion\":\"Sin ají\"").andExpect(status().isCreated())
-                .andExpect(jsonPath("$.estado").value("RESERVADA")).andExpect(jsonPath("$.curso").value("Cálculo II"))
+                .andExpect(jsonPath("$.estado").value("PENDIENTE")).andExpect(jsonPath("$.curso").value("Cálculo II"))
                 .andExpect(jsonPath("$.observacion").value("Sin ají")).andExpect(jsonPath("$.advertenciaPermiso").doesNotExist());
         reservar(res, "DESAYUNO_FRIO", lunes.plusDays(1)).andExpect(status().isCreated());
 
@@ -198,7 +198,7 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         List<String> estados = new ArrayList<>();
         historial.get("contenido").forEach(r -> estados.add(r.get("estado").asText()));
         Collections.sort(estados);
-        assertEquals(List.of("CANCELADA_RESIDENTE", "CANCELADA_RESIDENTE", "RESERVADA"), estados);
+        assertEquals(List.of("CANCELADA_RESIDENTE", "CANCELADA_RESIDENTE", "PENDIENTE"), estados);
     }
 
     @Test
@@ -213,7 +213,7 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         fijarLima(lunes, 18, 1); // la cena ya no
         mvc.perform(conToken(post("/api/v1/reservas/" + otra + "/cancelar"), res)).andExpect(status().isConflict());
         // y la reserva sigue activa y visible en el historial
-        mvc.perform(conToken(get("/api/v1/reservas/mias"), res)).andExpect(jsonPath("$.contenido[?(@.id == " + otra + ")].estado").value("RESERVADA"));
+        mvc.perform(conToken(get("/api/v1/reservas/mias"), res)).andExpect(jsonPath("$.contenido[?(@.id == " + otra + ")].estado").value("PENDIENTE"));
     }
 
     // ------------------------------------------------------------------ cada residente, lo suyo
@@ -297,9 +297,10 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         LocalDate lunes = lunesAleatorio();
         fijarLima(lunes, 9, 0);
         Instant salida = lunes.atTime(10, 0).atZone(LIMA).toInstant(), retorno = lunes.atTime(14, 0).atZone(LIMA).toInstant();
-        mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), res).contentType(MediaType.APPLICATION_JSON)
+        long permiso = idDe(mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), res).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tipo\":\"LARGO\",\"motivo\":\"Trabajo\",\"destino\":\"La Era\",\"salida\":\"" + salida + "\",\"retorno\":\"" + retorno + "\"}"))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("APROBADO"));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR")));
+        aprobarComoPastor(tokenDeRol(Rol.PRECEPTOR), permiso);
 
         // Reserva sin bloqueo y con la advertencia en la respuesta
         reservar(res, "ALMUERZO", lunes).andExpect(status().isCreated()).andExpect(jsonPath("$.advertenciaPermiso.tipo").value("LARGO"))
@@ -312,6 +313,35 @@ class ReservasIntegracionTest extends PruebaIntegracion {
     }
 
     // ------------------------------------------------------------------ solicitudes simultáneas
+
+    @Test
+    void elPastorApruebaORechazaLasReservasPendientes() throws Exception {
+        String res = nuevoResidente();
+        String pastor = tokenDeRol(Rol.PRECEPTOR);
+        LocalDate lunes = lunesAleatorio();
+        fijarLima(lunes, 10, 0);
+        long almuerzo = idDe(reservar(res, "ALMUERZO", lunes).andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("PENDIENTE")));
+        long cena = idDe(reservar(res, "CENA_TAPER", lunes).andExpect(status().isCreated()));
+        // Una pendiente ya ocupa el cupo: no se puede pedir otra igual.
+        reservar(res, "ALMUERZO", lunes).andExpect(status().isConflict());
+        // El pastor ve la lista del día con quién pidió; el residente no puede decidir.
+        mvc.perform(conToken(get("/api/v1/reservas/del-dia").param("fecha", lunes.toString()).param("tipo", "ALMUERZO"), pastor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.id == " + almuerzo + ")].estado").value("PENDIENTE"))
+                .andExpect(jsonPath("$[?(@.id == " + almuerzo + ")].residenteNombre").exists());
+        mvc.perform(conToken(post("/api/v1/reservas/" + almuerzo + "/decision"), res).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
+                .andExpect(status().isForbidden());
+        // Aprobar la deja RESERVADA; rechazar exige motivo y libera el cupo.
+        mvc.perform(conToken(post("/api/v1/reservas/" + almuerzo + "/decision"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("RESERVADA"));
+        mvc.perform(conToken(post("/api/v1/reservas/" + cena + "/decision"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":false}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(conToken(post("/api/v1/reservas/" + cena + "/decision"), pastor).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"aprobar\":false,\"comentario\":\"Sin cupo\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("RECHAZADA"));
+        mvc.perform(conToken(post("/api/v1/reservas/" + cena + "/decision"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
+                .andExpect(status().isConflict());
+        reservar(res, "CENA_TAPER", lunes).andExpect(status().isCreated());
+        mvc.perform(conToken(get("/api/v1/notificaciones"), res)).andExpect(status().isOk());
+    }
 
     private List<Integer> enParalelo(String token, String tipoA, String tipoB, LocalDate fecha) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(2);

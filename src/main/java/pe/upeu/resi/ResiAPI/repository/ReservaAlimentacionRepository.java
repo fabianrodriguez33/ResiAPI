@@ -35,11 +35,15 @@ public interface ReservaAlimentacionRepository extends JpaRepository<ReservaAlim
     @Query("select r.fecha from ReservaAlimentacion r where r.id = :id and r.residenteId = :residenteId")
     Optional<LocalDate> fechaDeSuReserva(@Param("id") Long id, @Param("residenteId") Long residenteId);
 
-    @Query("select count(r) > 0 from ReservaAlimentacion r where r.residenteId = :residenteId and r.fecha = :fecha and r.estado = :estado and r.tipo in :tipos")
-    boolean existeEnTipos(@Param("residenteId") Long residenteId, @Param("fecha") LocalDate fecha, @Param("estado") EstadoReserva estado,
+    @Query("select count(r) > 0 from ReservaAlimentacion r where r.residenteId = :residenteId and r.fecha = :fecha and r.estado in :estados and r.tipo in :tipos")
+    boolean existeEnTipos(@Param("residenteId") Long residenteId, @Param("fecha") LocalDate fecha, @Param("estados") Collection<EstadoReserva> estados,
                           @Param("tipos") Collection<TipoReserva> tipos);
 
-    List<ReservaAlimentacion> findByResidenteIdAndFechaInAndEstado(Long residenteId, Collection<LocalDate> fechas, EstadoReserva estado);
+    List<ReservaAlimentacion> findByResidenteIdAndFechaInAndEstadoIn(Long residenteId, Collection<LocalDate> fechas, Collection<EstadoReserva> estados);
+
+    /** Reservas de una fecha (y de un tipo, si se indica) para la lista del pastor, por orden de llegada. */
+    @Query("select r from ReservaAlimentacion r where r.fecha = :fecha and r.tipo in :tipos order by r.creadaEn asc, r.id asc")
+    List<ReservaAlimentacion> delDia(@Param("fecha") LocalDate fecha, @Param("tipos") Collection<TipoReserva> tipos);
 
     Page<ReservaAlimentacion> findByResidenteIdOrderByFechaDescIdDesc(Long residenteId, Pageable pageable);
 

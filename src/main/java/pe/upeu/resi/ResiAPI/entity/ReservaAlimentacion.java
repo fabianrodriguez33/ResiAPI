@@ -65,4 +65,13 @@ public class ReservaAlimentacion {
 
     @Column(name = "motivo_cancelacion")
     private String motivoCancelacion;
+
+    @Column(name = "decidida_por")
+    private Long decididaPor;
+
+    @Column(name = "decidida_en")
+    private Instant decididaEn;
+
+    @Column(name = "comentario_decision")
+    private String comentarioDecision;
 }

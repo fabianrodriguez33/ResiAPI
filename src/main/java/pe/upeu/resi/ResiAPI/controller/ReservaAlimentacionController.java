@@ -53,4 +53,20 @@ public class ReservaAlimentacionController {
     public PaginaResponse<ReservaResponse> mias(@RequestParam(defaultValue = "0") int pagina, @RequestParam(defaultValue = "20") int tamanio) {
         return reservas.mias(PageRequest.of(Math.max(pagina, 0), Math.min(Math.max(tamanio, 1), 100)));
     }
+
+    // ---- Pastor / monitor ----
+
+    /** Reservas de una fecha, de todos los tipos o de uno solo. */
+    @GetMapping("/del-dia")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.List<pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.ReservaPastorResponse> delDia(
+            @RequestParam java.time.LocalDate fecha, @RequestParam(required = false) pe.upeu.resi.ResiAPI.enums.TipoReserva tipo) {
+        return reservas.delDia(fecha, tipo);
+    }
+
+    @PostMapping("/{id}/decision")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public ReservaResponse decidir(@PathVariable Long id, @Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.PermisoDtos.DecisionRequest request) {
+        return reservas.decidir(id, request.aprobar(), request.comentario());
+    }
 }

@@ -22,6 +22,12 @@ public final class ReservaResponses {
                                   AdvertenciaPermiso advertenciaPermiso) {
     }
 
+    /** Una reserva en la lista del pastor: incluye quién la pidió. */
+    public record ReservaPastorResponse(Long id, Long residenteId, String residenteNombre, String codigo, TipoReserva tipo, LocalDate fecha,
+                                        String motivo, String curso, String observacion, EstadoReserva estado, Instant creadaEn,
+                                        String comentarioDecision) {
+    }
+
     public enum EstadoOferta {
         ABIERTA, NO_ABRIO, VENCIDA, DIA_CERRADO
     }
