@@ -88,13 +88,8 @@ public class ResidenteService {
     @Transactional
     public ResidenteResponse actualizarPerfil(PerfilRequest r) {
         var res = residentes.findByIdForUpdate(residenteActual().getId()).orElseThrow();
-        perfil.actualizarContacto(usuarios.findById(res.getUsuarioId()).orElseThrow(), r.email(), r.telefono(), r.fechaNacimiento());
-        if (r.carrera() != null) {
-            res.setCarrera(r.carrera().isBlank() ? null : r.carrera().trim());
-        }
-        if (r.ciclo() != null) {
-            res.setCiclo(r.ciclo().shortValue());
-        }
+        // El residente solo cambia su correo y su celular (la foto va aparte); carrera, ciclo y nacimiento los gestiona la administración.
+        perfil.actualizarContacto(usuarios.findById(res.getUsuarioId()).orElseThrow(), r.email(), r.telefono(), null);
         auditoria.registrar(sesion.obtener().id(), "PERFIL_ACTUALIZADO", "residente", res.getId(), null);
         return aResponse(res);
     }
@@ -261,6 +256,6 @@ public class ResidenteService {
         HabitacionResumen hab = asignaciones.findByResidenteIdAndHastaIsNull(r.getId())
                 .flatMap(a -> habitaciones.findById(a.getHabitacionId()).map(h -> new HabitacionResumen(h.getId(), h.getNumero(), a.getCama()))).orElse(null);
         return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), usuario.getTelefono(), r.isActivo(), hab, r.isPuedeSolicitarSolo(), usuario.getEmail(), r.getCarrera(),
-                r.getCiclo() == null ? null : r.getCiclo().intValue(), usuario.getDni(), usuario.getFechaNacimiento(), usuario.isEmailVerificado());
+                r.getCiclo() == null ? null : r.getCiclo().intValue(), usuario.getDni(), usuario.getFechaNacimiento(), usuario.isEmailVerificado(), usuario.getFotoEvidenciaId());
     }
 }

@@ -66,8 +66,11 @@ class NotificacionesIntegracionTest extends PruebaIntegracion {
         // El padre aprueba: avisa al residente y al pastor.
         mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + solicitud + "/decision"), padre).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"aprobar\":true}")).andExpect(status().isOk());
+        mvc.perform(conToken(get("/api/v1/notificaciones"), residente)).andExpect(jsonPath("$.contenido[0].titulo").value("Permiso en revisión"));
+        mvc.perform(conToken(get("/api/v1/notificaciones"), pastor)).andExpect(jsonPath("$.contenido[0].titulo").value("Permiso por revisar"));
+        // El pastor lo aprueba: avisa al residente y al padre, y recién entonces garita lo reconoce.
+        aprobarComoPastor(pastor, solicitud);
         mvc.perform(conToken(get("/api/v1/notificaciones"), residente)).andExpect(jsonPath("$.contenido[0].titulo").value("Permiso aprobado"));
-        mvc.perform(conToken(get("/api/v1/notificaciones"), pastor)).andExpect(jsonPath("$.contenido[0].titulo").value("Nuevo permiso aprobado"));
 
         // Leer: una por una y todas; nadie más puede tocar mis avisos.
         long aviso = leer(mvc.perform(conToken(get("/api/v1/notificaciones"), padre)).andReturn().getResponse().getContentAsString()).get("contenido").get(0).get("id").asLong();

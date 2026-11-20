@@ -33,6 +33,7 @@ public class PerfilService {
 
     private final UsuarioRepository usuarios;
     private final VerificacionCorreoRepository verificaciones;
+    private final EvidenciaService evidencias;
     private final EnviadorCorreo correo;
     private final AuditoriaService auditoria;
     private final SesionActual sesion;
@@ -49,6 +50,16 @@ public class PerfilService {
         var u = usuario(sesion.obtener().id());
         actualizarContacto(u, r.email(), r.telefono(), r.fechaNacimiento());
         auditoria.registrar(u.getId(), "PERFIL_ACTUALIZADO", "usuario", u.getId(), null);
+        return aResponse(u);
+    }
+
+    /** Cambia la foto de perfil por una imagen que la propia persona ya subió como evidencia. */
+    @Transactional
+    public PerfilResponse cambiarFoto(Long evidenciaId) {
+        var u = usuario(sesion.obtener().id());
+        evidencias.exigirPropia(evidenciaId, u.getId());
+        u.setFotoEvidenciaId(evidenciaId);
+        auditoria.registrar(u.getId(), "FOTO_PERFIL_CAMBIADA", "usuario", u.getId(), null);
         return aResponse(u);
     }
 
@@ -151,6 +162,6 @@ public class PerfilService {
 
     public static PerfilResponse aResponse(Usuario u) {
         return new PerfilResponse(u.getId(), u.getUsername(), u.getNombreCompleto(), u.getRol(), u.getDni(), u.getFechaNacimiento(),
-                u.getEmail(), u.isEmailVerificado(), u.getTelefono());
+                u.getEmail(), u.isEmailVerificado(), u.getTelefono(), u.getFotoEvidenciaId());
     }
 }

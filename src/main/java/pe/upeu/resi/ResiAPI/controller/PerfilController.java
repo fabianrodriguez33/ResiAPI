@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -31,6 +32,12 @@ public class PerfilController {
     @PatchMapping
     public PerfilResponse actualizar(@Valid @RequestBody ContactoRequest request) {
         return perfil.actualizarMio(request);
+    }
+
+    /** Foto de perfil: primero se sube la imagen en /evidencias y aquí se elige. */
+    @PutMapping("/foto")
+    public PerfilResponse cambiarFoto(@Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.PerfilDtos.FotoRequest request) {
+        return perfil.cambiarFoto(request.evidenciaId());
     }
 
     @PostMapping("/correo/codigo")

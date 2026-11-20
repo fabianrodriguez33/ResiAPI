@@ -21,4 +21,7 @@ public final class PerfilDtos {
 
     public record CodigoCorreoRequest(@NotBlank(message = "Escribe el código") @Pattern(regexp = "\\d{6}", message = "El código tiene 6 dígitos") String codigo) {
     }
+
+    public record FotoRequest(@jakarta.validation.constraints.NotNull(message = "Indique la foto") Long evidenciaId) {
+    }
 }
