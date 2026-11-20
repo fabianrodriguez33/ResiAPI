@@ -42,6 +42,7 @@ public class ResidenteController {
     private final HabitacionService habitaciones;
     private final QrService qr;
     private final SesionActual sesion;
+    private final pe.upeu.resi.ResiAPI.service.RankingService ranking;
 
     // ---- Habitaciones ----
     @GetMapping("/habitaciones")
@@ -80,6 +81,13 @@ public class ResidenteController {
     @PreAuthorize("hasRole('RESIDENTE')")
     public ResidenteResponse actualizarMiPerfil(@Valid @RequestBody PerfilRequest request) {
         return residentes.actualizarPerfil(request);
+    }
+
+    /** Su posición en cultos y limpieza en lo que va del ciclo. */
+    @GetMapping("/residentes/yo/ranking")
+    @PreAuthorize("hasRole('RESIDENTE')")
+    public pe.upeu.resi.ResiAPI.dto.response.RankingResponse ranking() {
+        return ranking.miRanking();
     }
 
     @GetMapping("/residentes/yo/qr")

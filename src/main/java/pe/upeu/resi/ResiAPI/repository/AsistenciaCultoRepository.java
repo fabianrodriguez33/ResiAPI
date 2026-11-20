@@ -17,6 +17,11 @@ public interface AsistenciaCultoRepository extends JpaRepository<AsistenciaCulto
     @org.springframework.data.jpa.repository.Query("select count(a) from AsistenciaCulto a, SesionCulto s where s.id = a.sesionId and a.residenteId = :residenteId and a.anulada = false and a.despuesDelCorte = true and s.fecha between :desde and :hasta")
     long contarTardanzasEnPeriodo(@org.springframework.data.repository.query.Param("residenteId") Long residenteId, @org.springframework.data.repository.query.Param("desde") java.time.LocalDate desde, @org.springframework.data.repository.query.Param("hasta") java.time.LocalDate hasta);
 
+    /** Cultos asistidos por residente en el periodo (asistencias no anuladas): filas [residenteId, cantidad]. */
+    @org.springframework.data.jpa.repository.Query("select a.residenteId, count(a) from AsistenciaCulto a, SesionCulto s where s.id = a.sesionId and a.anulada = false and s.fecha between :desde and :hasta group by a.residenteId")
+    java.util.List<Object[]> cultosPorResidente(@org.springframework.data.repository.query.Param("desde") java.time.LocalDate desde,
+                                                @org.springframework.data.repository.query.Param("hasta") java.time.LocalDate hasta);
+
     Optional<AsistenciaCulto> findBySesionIdAndResidenteId(Long sesionId, Long residenteId);
 
     /** Fechas en las que el residente asistió al menos a un culto (asistencia no anulada). */
