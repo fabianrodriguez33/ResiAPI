@@ -86,6 +86,12 @@ public class PermisoController {
         return permisos.listar(estado, pagina(pagina, tamanio));
     }
 
+    @GetMapping("/solicitudes/aprobados-hoy")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.Map<String, Long> aprobadosHoy() {
+        return java.util.Map.of("aprobados", permisos.aprobadosHoy());
+    }
+
     @GetMapping("/solicitudes/de-suspendidos")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public java.util.List<SolicitudResponse> deSuspendidos() {

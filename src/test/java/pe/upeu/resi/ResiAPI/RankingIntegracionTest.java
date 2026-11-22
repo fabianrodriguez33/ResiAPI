@@ -47,4 +47,15 @@ class RankingIntegracionTest extends PruebaIntegracion {
         // Solo el residente consulta su ranking.
         mvc.perform(conToken(get("/api/v1/residentes/yo/ranking"), pastor)).andExpect(status().isForbidden());
     }
+
+    @Test
+    void elRankingTambienSeCalculaParaUnaSemanaConcreta() throws Exception {
+        crearResidente(tokenDeRol(Rol.ADMINISTRADOR));
+        String residente = tokenDe(ultimoUsuario);
+        var semana = lunesAleatorio();
+        mvc.perform(conToken(get("/api/v1/residentes/yo/ranking").param("desde", semana.toString()).param("hasta", semana.plusDays(6).toString()), residente))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.desde").value(semana.toString())).andExpect(jsonPath("$.hasta").value(semana.plusDays(6).toString()));
+        mvc.perform(conToken(get("/api/v1/residentes/yo/ranking").param("desde", semana.toString()).param("hasta", semana.minusDays(1).toString()), residente))
+                .andExpect(status().isBadRequest());
+    }
 }

@@ -19,17 +19,17 @@ public final class ReservaResponses {
     /** {@code advertenciaPermiso} viene solo en la respuesta de reservar y en la oferta. */
     public record ReservaResponse(Long id, TipoReserva tipo, LocalDate fecha, String motivo, String curso, String observacion,
                                   EstadoReserva estado, Instant creadaEn, Instant canceladaEn, String motivoCancelacion,
-                                  AdvertenciaPermiso advertenciaPermiso) {
+                                  AdvertenciaPermiso advertenciaPermiso, Long evidenciaId) {
     }
 
     /** Una reserva en la lista del pastor: incluye quién la pidió. */
     public record ReservaPastorResponse(Long id, Long residenteId, String residenteNombre, String codigo, TipoReserva tipo, LocalDate fecha,
                                         String motivo, String curso, String observacion, EstadoReserva estado, Instant creadaEn,
-                                        String comentarioDecision) {
+                                        String comentarioDecision, Long evidenciaId) {
     }
 
     public enum EstadoOferta {
-        ABIERTA, NO_ABRIO, VENCIDA, DIA_CERRADO
+        ABIERTA, NO_ABRIO, VENCIDA, DIA_CERRADO, SIN_ABRIR, CERRADAS
     }
 
     /**

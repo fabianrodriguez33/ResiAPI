@@ -22,6 +22,9 @@ public interface SolicitudPermisoRepository extends JpaRepository<SolicitudPermi
 
     Page<SolicitudPermiso> findByResidenteIdInAndEstadoOrderByCreadoEnDesc(java.util.Collection<Long> residenteIds, EstadoSolicitud estado, Pageable pageable);
 
+    /** Permisos que el pastor aprobó en el rango dado (se usa para «aprobados hoy»). */
+    long countByEstadoAndDecididoEnGreaterThanEqualAndDecididoEnLessThan(EstadoSolicitud estado, java.time.Instant desde, java.time.Instant hasta);
+
     long countByResidenteIdInAndEstado(java.util.Collection<Long> residenteIds, EstadoSolicitud estado);
 
     Page<SolicitudPermiso> findByEstadoOrderByCreadoEnDesc(EstadoSolicitud estado, Pageable pageable);

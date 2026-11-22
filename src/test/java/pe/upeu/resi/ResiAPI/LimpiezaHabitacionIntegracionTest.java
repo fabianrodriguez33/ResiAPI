@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDate;
@@ -30,6 +31,33 @@ class LimpiezaHabitacionIntegracionTest extends PruebaIntegracion {
     private int enviar(String token, long habitacion, String cuerpo) throws Exception {
         return mvc.perform(conToken(post("/api/v1/limpieza/habitaciones/" + habitacion + "/evaluaciones"), token)
                 .contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andReturn().getResponse().getStatus();
+    }
+
+    @Test
+    void elPastorModificaLaEvaluacionDeUnaHabitacionYEliminaLaDelDia() throws Exception {
+        String admin = tokenDeRol(Rol.ADMINISTRADOR), preceptor = tokenDeRol(Rol.PRECEPTOR);
+        long hab = crearHabitacion(admin, 2);
+        long r1 = crearResidente(admin);
+        asignar(admin, r1, hab);
+        LocalDate fecha = lunesAleatorio();
+        fijarLima(fecha, 10, 0);
+        assertEquals(201, enviar(preceptor, hab, cuerpo(fecha, 2, 1, persona(r1, 5, 3, 3, 3))));
+        // Se consulta lo evaluado y se modifica en un solo paso (las notas cambian)
+        mvc.perform(conToken(get("/api/v1/limpieza/habitaciones/" + hab + "/evaluacion").param("fecha", fecha.toString()), preceptor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.basura").value(2)).andExpect(jsonPath("$.residentes[0].ropero").value(5));
+        mvc.perform(conToken(post("/api/v1/limpieza/habitaciones/" + hab + "/reemplazar"), preceptor).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpo(fecha, 3, 3, persona(r1, 1, 1, 1, 1)))).andExpect(status().isOk()).andExpect(jsonPath("$[0].total").value(1 + 1 + 1 + 1 + 3 + 3));
+        mvc.perform(conToken(get("/api/v1/limpieza/habitaciones/" + hab + "/evaluacion").param("fecha", fecha.toString()), preceptor))
+                .andExpect(jsonPath("$.basura").value(3)).andExpect(jsonPath("$.residentes[0].ropero").value(1));
+        // Solo el pastor modifica; sin evaluación previa no hay nada que reemplazar
+        mvc.perform(conToken(post("/api/v1/limpieza/habitaciones/" + hab + "/reemplazar"), admin).contentType(MediaType.APPLICATION_JSON)
+                .content(cuerpo(fecha, 3, 3, persona(r1, 1, 1, 1, 1)))).andExpect(status().isForbidden());
+        // Eliminar toda la evaluación del día (con motivo) deja la habitación libre para evaluar de nuevo
+        mvc.perform(conToken(post("/api/v1/limpieza/eliminar-dia"), preceptor).contentType(MediaType.APPLICATION_JSON).content("{\"fecha\":\"" + fecha + "\",\"motivo\":\" \"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(conToken(post("/api/v1/limpieza/eliminar-dia"), preceptor).contentType(MediaType.APPLICATION_JSON).content("{\"fecha\":\"" + fecha + "\",\"motivo\":\"Se evaluó el día equivocado\"}"))
+                .andExpect(status().isOk());
+        assertEquals(201, enviar(preceptor, hab, cuerpo(fecha, 2, 2, persona(r1, 4, 2, 2, 2))));
     }
 
     @Test

@@ -29,9 +29,13 @@ public final class ResidenteDtos {
             @NotBlank(message = "El nombre es obligatorio") @Size(max = 150) String nombreCompleto,
             @NotBlank(message = "El código universitario es obligatorio")
             @Pattern(regexp = "\\d{9}", message = "El código universitario tiene 9 dígitos (ej. 202410354)") String codigo,
-            @NotBlank(message = "El DNI es obligatorio") @Pattern(regexp = "\\d{8}", message = "El DNI tiene 8 dígitos") String dni,
+            /** Opcional al registrar: la administración puede completarlo después. */
+            @Pattern(regexp = "^(\\d{8})?$", message = "El DNI tiene 8 dígitos") String dni,
             @jakarta.validation.constraints.Past(message = "La fecha de nacimiento debe ser anterior a hoy") java.time.LocalDate fechaNacimiento,
-            @jakarta.validation.constraints.Pattern(regexp = "^(\\d{9})?$", message = "El celular debe tener exactamente 9 dígitos") @Size(max = 20) String telefono) {
+            @NotBlank(message = "El celular es obligatorio") @jakarta.validation.constraints.Pattern(regexp = "^\\d{9}$", message = "El celular debe tener exactamente 9 dígitos") String telefono,
+            @NotBlank(message = "El correo es obligatorio") @jakarta.validation.constraints.Pattern(regexp = "^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Size(max = 150) String email,
+            @Size(max = 100, message = "Máximo 100 caracteres") String carrera,
+            @Min(value = 1, message = "El ciclo va de 1 a 14") @Max(value = 14, message = "El ciclo va de 1 a 14") Integer ciclo) {
     }
 
     /**

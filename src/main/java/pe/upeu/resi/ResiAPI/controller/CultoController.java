@@ -52,6 +52,12 @@ public class CultoController {
         return cultos.deHoy();
     }
 
+    @GetMapping("/cultos/presentes-hoy")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.Map<String, Long> presentesHoy() {
+        return java.util.Map.of("residentes", cultos.presentesHoy());
+    }
+
     @GetMapping("/cultos/sesiones")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public List<SesionCultoResponse> deFecha(@RequestParam java.time.LocalDate fecha) {
@@ -103,6 +109,12 @@ public class CultoController {
         return cultos.pendientes(id);
     }
 
+    @org.springframework.web.bind.annotation.DeleteMapping("/cultos/sesiones/{id}")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public void eliminarSesion(@PathVariable Long id) {
+        cultos.eliminarSesion(id);
+    }
+
     @PostMapping("/cultos/sesiones/{id}/cerrar")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public SesionCultoResponse cerrar(@PathVariable Long id) {
@@ -113,6 +125,13 @@ public class CultoController {
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public void anular(@PathVariable Long id, @Valid @RequestBody AnularRequest request) {
         cultos.anular(id, request.motivo());
+    }
+
+    @GetMapping("/residentes/yo/dias-con-culto")
+    @PreAuthorize("hasRole('RESIDENTE')")
+    public List<java.time.LocalDate> diasConCulto(@RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate desde,
+                                                  @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate hasta) {
+        return cultos.diasConCulto(desde, hasta);
     }
 
     @GetMapping("/residentes/yo/asistencias")

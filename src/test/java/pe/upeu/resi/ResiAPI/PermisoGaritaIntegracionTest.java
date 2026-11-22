@@ -70,6 +70,49 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
                 .content("{\"qr\":\"" + qr + "\",\"tipo\":\"" + tipo + "\"}")).andReturn().getResponse().getStatus();
     }
 
+    @Test
+    void garitaPuedeDigitarElCodigoUniversitarioYVeLosPermisosAprobados() throws Exception {
+        var e = escenario();
+        Instant base = base();
+        long permiso = solicitudAprobada(e, base.plus(Duration.ofHours(1)), base.plus(Duration.ofHours(2)));
+        String codigo = leer(mvc.perform(conToken(get("/api/v1/residentes/" + e.residenteId()), e.admin())).andReturn().getResponse().getContentAsString()).get("codigo").asString();
+        fijarLima(lunesAleatorio(), 10, 0);
+        // El código de 9 dígitos equivale a escanear el QR del residente
+        assertEquals(verificar(e, e.qr()), verificar(e, codigo));
+        // Un código que no existe nunca autoriza
+        assertEquals("QR_INVALIDO", verificar(e, "999999999"));
+        // Garita ve los permisos aprobados; el residente no entra a esa lista
+        mvc.perform(conToken(get("/api/v1/garita/permisos"), e.garita())).andExpect(status().isOk()).andExpect(jsonPath("$.contenido").isArray());
+        mvc.perform(conToken(get("/api/v1/garita/permisos"), e.residente())).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void conVariosPermisosGaritaEligeConCualSaleYVuelve() throws Exception {
+        var e = escenario();
+        Instant base = base();
+        var dia = base.atZone(java.time.ZoneId.of("America/Lima")).toLocalDate();
+        long corto = solicitudAprobada(e, base.plus(Duration.ofHours(1)), base.plus(Duration.ofHours(2)));   // 11:00 a 12:00
+        long largo = solicitudAprobada(e, base.plus(Duration.ofHours(5)), base.plus(Duration.ofHours(8)));   // 15:00 a 18:00
+        fijarLima(dia, 11, 30);
+        String cuerpo = "{\"qr\":\"" + e.qr() + "\"}";
+        // Al escanear salen los dos permisos aprobados
+        mvc.perform(conToken(post("/api/v1/garita/permisos-del-residente"), e.garita()).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.permisos.length()").value(2)).andExpect(jsonPath("$.permisos[0].salidaAbierta").value(false));
+        // El largo todavía no está en su horario; el corto sí
+        String conLargo = "{\"qr\":\"" + e.qr() + "\",\"solicitudId\":" + largo + "}";
+        mvc.perform(conToken(post("/api/v1/garita/verificaciones"), e.garita()).contentType(MediaType.APPLICATION_JSON).content(conLargo))
+                .andExpect(jsonPath("$.resultado").value("PERMISO_AUN_NO_VIGENTE"));
+        String conCorto = "{\"qr\":\"" + e.qr() + "\",\"tipo\":\"SALIDA\",\"solicitudId\":" + corto + "}";
+        mvc.perform(conToken(post("/api/v1/garita/movimientos"), e.garita()).contentType(MediaType.APPLICATION_JSON).content(conCorto))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.solicitudId").value(corto));
+        // Ya salió con el corto: figura como salida abierta y lo siguiente es su retorno
+        mvc.perform(conToken(post("/api/v1/garita/permisos-del-residente"), e.garita()).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(jsonPath("$.permisos[0].salidaAbierta").value(true));
+        assertEquals("AUTORIZADO_RETORNO", verificar(e, e.qr()));
+        // Un permiso de otro residente no se puede elegir
+        mvc.perform(conToken(post("/api/v1/garita/permisos-del-residente"), e.residente()).contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isForbidden());
+    }
+
     private Instant base() {
         fijarLima(lunesAleatorio(), 10, 0);
         return reloj.instant();

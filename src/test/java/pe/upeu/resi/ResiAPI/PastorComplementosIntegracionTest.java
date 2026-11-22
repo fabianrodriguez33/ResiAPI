@@ -14,51 +14,43 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import pe.upeu.resi.ResiAPI.enums.Rol;
 
-/** Lo que el pastor o monitor hace además de revisar: crear y cerrar reservas, exportar, código manual y su foto. */
+/** Lo que el pastor o monitor hace además de revisar: abrir y cerrar reservas, exportar, código manual y su foto. */
 class PastorComplementosIntegracionTest extends PruebaIntegracion {
 
-    private String cuerpoReserva(long residenteId, String tipo, LocalDate fecha) {
-        return "{\"residenteId\":" + residenteId + ",\"tipo\":\"" + tipo + "\",\"fecha\":\"" + fecha + "\",\"motivo\":\"Clases\",\"curso\":\"Cálculo\"}";
-    }
+    @org.springframework.beans.factory.annotation.Autowired
+    pe.upeu.resi.ResiAPI.repository.ResidenteRepository residentes;
+
 
     @Test
-    void elPastorCreaReservasConSusHorariosLasCierraYLasExporta() throws Exception {
-        String admin = tokenDeRol(Rol.ADMINISTRADOR);
+    void elPastorAbreApruebaCierraYExportaSoloNombreYCodigo() throws Exception {
         String pastor = tokenDeRol(Rol.PRECEPTOR);
-        long idA = crearResidente(admin);
-        long idB = crearResidente(admin);
+        String admin = tokenDeRol(Rol.ADMINISTRADOR);
+        long id = crearResidente(admin);
+        String residente = tokenDe(ultimoUsuario);
         LocalDate lunes = lunesAleatorio();
-
-        // Almuerzo: hasta la 1 p. m.; pasada la hora ya no se abre ese día.
-        fijarLima(lunes, 12, 30);
-        mvc.perform(conToken(post("/api/v1/reservas/pastor"), pastor).contentType(MediaType.APPLICATION_JSON).content(cuerpoReserva(idA, "ALMUERZO", lunes)))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("RESERVADA"));
-        mvc.perform(conToken(post("/api/v1/reservas/pastor"), pastor).contentType(MediaType.APPLICATION_JSON).content(cuerpoReserva(idA, "ALMUERZO", lunes)))
-                .andExpect(status().isConflict()); // ya la tiene
-        fijarLima(lunes, 13, 1);
-        mvc.perform(conToken(post("/api/v1/reservas/pastor"), pastor).contentType(MediaType.APPLICATION_JSON).content(cuerpoReserva(idB, "ALMUERZO", lunes)))
-                .andExpect(status().isConflict());
-
-        // Cena: hasta las 6 p. m.
-        fijarLima(lunes, 17, 59);
-        mvc.perform(conToken(post("/api/v1/reservas/pastor"), pastor).contentType(MediaType.APPLICATION_JSON).content(cuerpoReserva(idB, "CENA_TAPER", lunes)))
-                .andExpect(status().isCreated());
-        fijarLima(lunes, 18, 1);
-        mvc.perform(conToken(post("/api/v1/reservas/pastor"), pastor).contentType(MediaType.APPLICATION_JSON).content(cuerpoReserva(idA, "CENA_TAPER", lunes)))
-                .andExpect(status().isConflict());
-        // Solo el pastor crea reservas de otros.
-        mvc.perform(conToken(post("/api/v1/reservas/pastor"), tokenDe(ultimoUsuario)).contentType(MediaType.APPLICATION_JSON).content(cuerpoReserva(idA, "ALMUERZO", lunes)))
-                .andExpect(status().isForbidden());
-
-        // Cerrar el almuerzo: ya no entran reservas y la lista se exporta con la aprobada.
-        mvc.perform(conToken(post("/api/v1/reservas/cerrar"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"fecha\":\"" + lunes + "\",\"grupo\":\"ALMUERZO\"}"))
+        fijarLima(lunes, 10, 0);
+        byte[] png = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0};
+        long foto = leer(mvc.perform(multipart("/api/v1/evidencias").file(new MockMultipartFile("archivo", "foto.png", "image/png", png))
+                .header("Authorization", "Bearer " + residente)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        String grupo = "{\"fecha\":\"" + lunes + "\",\"grupo\":\"ALMUERZO\"}";
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), pastor).contentType(MediaType.APPLICATION_JSON).content(grupo)).andExpect(status().isOk());
+        long reserva = leer(mvc.perform(conToken(post("/api/v1/reservas"), residente).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tipo\":\"ALMUERZO\",\"fecha\":\"" + lunes + "\",\"motivo\":\"Clases\",\"curso\":\"Cálculo\",\"evidenciaId\":" + foto + "}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        mvc.perform(conToken(post("/api/v1/reservas/" + reserva + "/decision"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
                 .andExpect(status().isOk());
-        mvc.perform(conToken(post("/api/v1/reservas/cerrar"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"fecha\":\"" + lunes + "\",\"grupo\":\"ALMUERZO\"}"))
-                .andExpect(status().isConflict());
+        // Solo el pastor abre, cierra y exporta
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), tokenDeRol(Rol.GARITA)).contentType(MediaType.APPLICATION_JSON).content(grupo)).andExpect(status().isForbidden());
+
+        // Cerrar: ya no entran reservas, no se vuelve a cerrar ni a abrir ese día, y la lista se exporta con la aprobada.
+        mvc.perform(conToken(post("/api/v1/reservas/cerrar"), pastor).contentType(MediaType.APPLICATION_JSON).content(grupo)).andExpect(status().isOk());
+        mvc.perform(conToken(post("/api/v1/reservas/cerrar"), pastor).contentType(MediaType.APPLICATION_JSON).content(grupo)).andExpect(status().isConflict());
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), pastor).contentType(MediaType.APPLICATION_JSON).content(grupo)).andExpect(status().isConflict());
         mvc.perform(conToken(get("/api/v1/reservas/cierres").param("fecha", lunes.toString()), pastor)).andExpect(jsonPath("$[0]").value("ALMUERZO"));
         String csv = mvc.perform(conToken(get("/api/v1/reservas/exportar").param("fecha", lunes.toString()).param("grupo", "ALMUERZO"), pastor))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
-        assertTrue(csv.contains("Código;Nombre;Comida;Motivo;Curso") && csv.contains("Cálculo"), csv);
+        String codigo = residentes.findById(id).orElseThrow().getCodigo();
+        assertTrue(csv.contains("Código;Nombre") && csv.contains(codigo) && !csv.contains("Motivo") && !csv.contains("Cálculo"), csv);
     }
 
     @Test
@@ -91,5 +83,26 @@ class PastorComplementosIntegracionTest extends PruebaIntegracion {
         mvc.perform(conToken(put("/api/v1/perfil/foto"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"evidenciaId\":" + foto + "}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.fotoEvidenciaId").value(foto));
         mvc.perform(conToken(get("/api/v1/evidencias/" + foto), pastor)).andExpect(status().isOk());
+    }
+
+    @Test
+    void laReservaPuedeLlevarUnaFotoPropia() throws Exception {
+        String admin = tokenDeRol(Rol.ADMINISTRADOR);
+        crearResidente(admin);
+        String a = tokenDe(ultimoUsuario);
+        crearResidente(admin);
+        String b = tokenDe(ultimoUsuario);
+        LocalDate lunes = lunesAleatorio();
+        fijarLima(lunes, 10, 0);
+        byte[] png = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0};
+        long foto = leer(mvc.perform(multipart("/api/v1/evidencias").file(new MockMultipartFile("archivo", "foto.png", "image/png", png))
+                .header("Authorization", "Bearer " + a)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), tokenDeRol(Rol.PRECEPTOR)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fecha\":\"" + lunes + "\",\"grupo\":\"ALMUERZO\"}")).andExpect(status().isOk());
+        String cuerpo = "{\"tipo\":\"ALMUERZO\",\"fecha\":\"" + lunes + "\",\"motivo\":\"Clases\",\"curso\":\"Cálculo\",\"evidenciaId\":" + foto + "}";
+        // La foto de otra persona no se puede usar; la propia queda en la reserva.
+        mvc.perform(conToken(post("/api/v1/reservas"), b).contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isBadRequest());
+        mvc.perform(conToken(post("/api/v1/reservas"), a).contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.evidenciaId").value(foto));
     }
 }

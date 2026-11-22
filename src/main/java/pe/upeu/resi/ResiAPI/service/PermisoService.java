@@ -88,6 +88,7 @@ public class PermisoService {
     private final NotificacionService avisos;
     private final HabilitacionService habilitacion;
     private final SesionActual sesion;
+    private final AutorizacionPermisoService autorizaciones;
     private final Clock reloj;
     private final ZoneId zona;
 
@@ -98,9 +99,11 @@ public class PermisoService {
     public SolicitudResponse crear(SolicitudRequest r) {
         Residente residente = residenteService.residenteActual();
         habilitacion.exigirHabilitado(residente, true);
-        // Pernoctar fuera siempre pasa por el apoderado, aunque el residente tenga el privilegio para corto y largo.
-        boolean requiereApoderado = r.tipo() == TipoPermiso.PERNOCTE
-                || (!residente.isPuedeSolicitarSolo() && config.booleano("permiso.apoderado.requerido", true));
+        // Con una autorización vigente para ese tipo (hoja firmada) el estudiante envía directo al pastor. El interruptor antiguo
+        // solo vale para corto y largo y nunca para pernoctar. Sin ninguna de las dos, primero acepta el apoderado.
+        boolean autorizado = autorizaciones.vigente(residente.getId(), r.tipo(), r.salida().atZone(zona).toLocalDate())
+                || (r.tipo() != TipoPermiso.PERNOCTE && residente.isPuedeSolicitarSolo());
+        boolean requiereApoderado = !autorizado && config.booleano("permiso.apoderado.requerido", true);
         if (requiereApoderado && vinculos.findByResidenteId(residente.getId()).isEmpty()) {
             throw new Excepciones.Conflicto("No tienes un apoderado registrado; comunícate con administración");
         }
@@ -139,8 +142,11 @@ public class PermisoService {
             throw new Excepciones.Conflicto(HorarioEnvio.MENSAJE);
         }
         Map<String, String> errores = new java.util.LinkedHashMap<>();
-        if (r.salida().isBefore(ahora.minus(Duration.ofMinutes(5)))) {
-            errores.put("salida", "La salida no puede estar en el pasado");
+        // Fecha estricta (hora de Lima): no se pide un permiso para un día anterior a hoy ni para una hora que ya pasó (5 min de margen).
+        if (r.salida().atZone(zona).toLocalDate().isBefore(momentoDeEnvio.atZone(zona).toLocalDate())) {
+            errores.put("salida", "La fecha de salida no puede ser anterior a hoy");
+        } else if (r.salida().isBefore(momentoDeEnvio.minus(Duration.ofMinutes(5)))) {
+            errores.put("salida", "La hora de salida ya pasó");
         }
         if (!r.retorno().isAfter(r.salida())) {
             errores.put("retorno", "El retorno debe ser posterior a la salida");
@@ -303,6 +309,14 @@ public class PermisoService {
         var s = solicitudes.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Solicitud no encontrada"));
         exigirHijo(s.getResidenteId());
         return cancelarSolicitud(s);
+    }
+
+    /** Permisos aprobados hoy (hora de Lima): el contador del inicio del pastor, que vuelve a empezar cada día. */
+    @Transactional(readOnly = true)
+    public long aprobadosHoy() {
+        LocalDate hoy = reloj.instant().atZone(zona).toLocalDate();
+        return solicitudes.countByEstadoAndDecididoEnGreaterThanEqualAndDecididoEnLessThan(
+                EstadoSolicitud.APROBADO, hoy.atStartOfDay(zona).toInstant(), hoy.plusDays(1).atStartOfDay(zona).toInstant());
     }
 
     // ------------------------------------------------------------------ resumen para el pastor

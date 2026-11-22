@@ -37,6 +37,12 @@ public class RankingService {
 
     @Transactional(readOnly = true)
     public RankingResponse miRanking() {
+        return miRanking(null, null);
+    }
+
+    /** Ranking del residente en un rango de fechas (una semana, un mes...); sin rango, el del semestre en curso. */
+    @Transactional(readOnly = true)
+    public RankingResponse miRanking(LocalDate desdePedido, LocalDate hastaPedido) {
         Long yo = residenteService.residenteActual().getId();
         LocalDate hoy = reloj.instant().atZone(zona).toLocalDate();
         // Sin configuración: ciclo I de marzo a julio y ciclo II de agosto a fin de febrero (enero y febrero cierran el II del año anterior).
@@ -44,6 +50,13 @@ public class RankingService {
         boolean segundo = hoy.getMonthValue() >= 8 || hoy.getMonthValue() <= 2;
         LocalDate desde = fecha("ciclo.inicio").orElse(segundo ? LocalDate.of(anioII, 8, 1) : LocalDate.of(hoy.getYear(), 3, 1));
         LocalDate hasta = fecha("ciclo.fin").orElse(segundo ? LocalDate.of(anioII + 1, 3, 1).minusDays(1) : LocalDate.of(hoy.getYear(), 7, 31));
+        if (desdePedido != null && hastaPedido != null) {
+            if (hastaPedido.isBefore(desdePedido) || desdePedido.plusYears(1).isBefore(hastaPedido)) {
+                throw new pe.upeu.resi.ResiAPI.exception.Excepciones.SolicitudInvalida("Rango de fechas inválido", java.util.Map.of("hasta", "Pide un rango de hasta un año"));
+            }
+            desde = desdePedido;
+            hasta = hastaPedido;
+        }
         List<Long> activos = residentes.findAll().stream().filter(Residente::isActivo).map(Residente::getId).toList();
 
         Map<Long, Double> cultos = new HashMap<>();

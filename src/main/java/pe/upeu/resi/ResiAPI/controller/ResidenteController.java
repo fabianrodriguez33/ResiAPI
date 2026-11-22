@@ -51,6 +51,12 @@ public class ResidenteController {
         return habitaciones.listar();
     }
 
+    @GetMapping("/habitaciones/{id}/ocupantes")
+    @PreAuthorize("hasAnyRole('ADMINISTRADOR','PRECEPTOR')")
+    public List<pe.upeu.resi.ResiAPI.dto.response.ResidenteResponses.OcupanteResponse> ocupantes(@PathVariable Long id) {
+        return habitaciones.ocupantes(id);
+    }
+
     @GetMapping("/habitaciones/ocupacion")
     @PreAuthorize("hasAnyRole('ADMINISTRADOR','PRECEPTOR')")
     public OcupacionResponse ocupacion() {
@@ -86,8 +92,9 @@ public class ResidenteController {
     /** Su posición en cultos y limpieza en lo que va del ciclo. */
     @GetMapping("/residentes/yo/ranking")
     @PreAuthorize("hasRole('RESIDENTE')")
-    public pe.upeu.resi.ResiAPI.dto.response.RankingResponse ranking() {
-        return ranking.miRanking();
+    public pe.upeu.resi.ResiAPI.dto.response.RankingResponse ranking(@RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate desde,
+                                                                     @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate hasta) {
+        return ranking.miRanking(desde, hasta);
     }
 
     @GetMapping("/residentes/yo/qr")
@@ -120,6 +127,12 @@ public class ResidenteController {
     @PreAuthorize("hasRole('ADMINISTRADOR')")
     public ResidenteResponse actualizar(@PathVariable Long id, @Valid @RequestBody ResidenteActualizarRequest request) {
         return residentes.actualizar(id, request);
+    }
+
+    @PostMapping("/residentes/{id}/liberar-habitacion")
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
+    public ResidenteResponse liberarHabitacion(@PathVariable Long id) {
+        return residentes.liberarHabitacion(id);
     }
 
     @PostMapping("/residentes/{id}/asignacion")

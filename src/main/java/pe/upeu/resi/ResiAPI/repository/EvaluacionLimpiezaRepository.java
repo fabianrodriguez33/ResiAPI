@@ -19,6 +19,8 @@ public interface EvaluacionLimpiezaRepository extends JpaRepository<EvaluacionLi
 
     java.util.List<EvaluacionLimpieza> findByHabitacionIdAndFecha(Long habitacionId, LocalDate fecha);
 
+    java.util.List<EvaluacionLimpieza> findByFecha(LocalDate fecha);
+
     Page<EvaluacionLimpieza> findByResidenteIdOrderByFechaDesc(Long residenteId, Pageable pageable);
 
     /** Una fila: {cantidad, promedio del total}; el promedio es null si no hay evaluaciones. */

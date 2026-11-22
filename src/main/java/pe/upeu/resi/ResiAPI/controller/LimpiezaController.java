@@ -40,6 +40,37 @@ public class LimpiezaController {
         return limpieza.habitaciones(fecha);
     }
 
+    public record EliminarEvaluacionRequest(@jakarta.validation.constraints.NotNull java.time.LocalDate fecha, @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 300) String motivo) {
+    }
+
+    @GetMapping("/limpieza/habitaciones/{id}/evaluacion")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public pe.upeu.resi.ResiAPI.service.LimpiezaService.EvaluacionHabitacionDetalle detalle(@org.springframework.web.bind.annotation.PathVariable Long id,
+                                                                                         @RequestParam java.time.LocalDate fecha) {
+        return limpieza.detalleDeHabitacion(id, fecha);
+    }
+
+    @PostMapping("/limpieza/habitaciones/{id}/reemplazar")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public java.util.List<EvaluacionResponse> reemplazar(@org.springframework.web.bind.annotation.PathVariable Long id, @Valid @RequestBody LimpiezaHabitacionRequest request) {
+        return limpieza.reemplazarHabitacion(id, request);
+    }
+
+    public record EliminarDiaRequest(@jakarta.validation.constraints.NotNull java.time.LocalDate fecha, @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 300) String motivo) {
+    }
+
+    @PostMapping("/limpieza/eliminar-dia")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public java.util.Map<String, Integer> eliminarDia(@Valid @RequestBody EliminarDiaRequest r) {
+        return java.util.Map.of("eliminadas", limpieza.eliminarDelDia(r.fecha(), r.motivo()));
+    }
+
+    @PostMapping("/limpieza/habitaciones/{id}/eliminar")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public java.util.Map<String, Integer> eliminar(@org.springframework.web.bind.annotation.PathVariable Long id, @Valid @RequestBody EliminarEvaluacionRequest r) {
+        return java.util.Map.of("eliminadas", limpieza.eliminarDeHabitacion(id, r.fecha(), r.motivo()));
+    }
+
     @PostMapping("/limpieza/habitaciones/{id}/evaluaciones")
     @PreAuthorize("hasRole('PRECEPTOR')")
     @ResponseStatus(HttpStatus.CREATED)

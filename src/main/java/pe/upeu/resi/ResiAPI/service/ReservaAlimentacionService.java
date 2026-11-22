@@ -25,6 +25,8 @@ import pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.ReservaPastorResponse;
 import pe.upeu.resi.ResiAPI.dto.response.ReservaResponses.ReservaResponse;
 import pe.upeu.resi.ResiAPI.enums.Rol;
 import pe.upeu.resi.ResiAPI.repository.CierreReservasRepository;
+import pe.upeu.resi.ResiAPI.repository.AperturaReservasRepository;
+import pe.upeu.resi.ResiAPI.entity.AperturaReservas;
 import pe.upeu.resi.ResiAPI.repository.ResidenteRepository;
 import pe.upeu.resi.ResiAPI.entity.CierreReservas;
 import pe.upeu.resi.ResiAPI.repository.UsuarioRepository;
@@ -63,6 +65,8 @@ public class ReservaAlimentacionService {
     private final AuditoriaService auditoria;
     private final NotificacionService avisos;
     private final CierreReservasRepository cierres;
+    private final AperturaReservasRepository aperturas;
+    private final EvidenciaService evidencias;
     private final ResidenteRepository residentes;
     private final UsuarioRepository usuarios;
     private final SesionActual sesion;
@@ -96,14 +100,21 @@ public class ReservaAlimentacionService {
             DiaComedor dia = dias.findById(fecha).filter(DiaComedor::isCerrado).orElse(null);
             var propia = activas.stream().filter(r -> r.getFecha().equals(fecha) && r.getTipo() == tipo).findFirst().orElse(null);
             var delGrupo = activas.stream().filter(r -> r.getFecha().equals(fecha) && grupo(r.getTipo()).contains(tipo)).findFirst().orElse(null);
-            EstadoOferta estado = dia != null ? EstadoOferta.DIA_CERRADO : switch (ventana) {
-                case ABIERTA -> EstadoOferta.ABIERTA;
+            String grupoDeTipo = grupoDe(tipo);
+            boolean cerradaPorPastor = cierres.existsByFechaAndGrupo(fecha, grupoDeTipo);
+            boolean abiertaPorPastor = aperturas.existsByFechaAndGrupo(fecha, grupoDeTipo);
+            EstadoOferta estado = dia != null ? EstadoOferta.DIA_CERRADO : cerradaPorPastor ? EstadoOferta.CERRADAS : switch (ventana) {
+                case ABIERTA -> abiertaPorPastor ? EstadoOferta.ABIERTA : EstadoOferta.SIN_ABRIR;
                 case NO_ABRIO -> EstadoOferta.NO_ABRIO;
                 default -> EstadoOferta.VENCIDA;
             };
             String motivoNo = null;
             if (estado == EstadoOferta.DIA_CERRADO) {
                 motivoNo = "El comedor está cerrado ese día" + (dia.getMotivo() == null ? "" : ": " + dia.getMotivo());
+            } else if (estado == EstadoOferta.CERRADAS) {
+                motivoNo = "El pastor ya cerró las reservas de esta comida";
+            } else if (estado == EstadoOferta.SIN_ABRIR) {
+                motivoNo = "El pastor todavía no abrió las reservas de esta comida";
             } else if (estado == EstadoOferta.NO_ABRIO) {
                 motivoNo = "Las reservas todavía no abren";
             } else if (estado == EstadoOferta.VENCIDA) {
@@ -126,11 +137,18 @@ public class ReservaAlimentacionService {
         if (!residente.isActivo()) {
             throw new Excepciones.Conflicto("El residente no está activo");
         }
-        if (r.tipo() == TipoReserva.DESAYUNO_FRIO && r.curso() != null && !r.curso().isBlank()) {
-            throw new Excepciones.SolicitudInvalida("Datos inválidos", Map.of("curso", "El desayuno frío no lleva curso o actividad"));
-        }
+        var faltas = new java.util.LinkedHashMap<String, String>();
         if (r.motivo() == null || r.motivo().isBlank()) {
-            throw new Excepciones.SolicitudInvalida("Datos inválidos", Map.of("motivo", "El motivo es obligatorio"));
+            faltas.put("motivo", "El motivo es obligatorio");
+        }
+        if (r.curso() == null || r.curso().isBlank()) {
+            faltas.put("curso", "El curso o actividad es obligatorio");
+        }
+        if (r.evidenciaId() == null) {
+            faltas.put("evidenciaId", "Adjunta una foto");
+        }
+        if (!faltas.isEmpty()) {
+            throw new Excepciones.SolicitudInvalida("Datos inválidos", faltas);
         }
         LocalDate fecha = r.fecha();
         if (!HorarioReservas.seSirve(r.tipo(), fecha)) {
@@ -138,6 +156,9 @@ public class ReservaAlimentacionService {
         }
         reservas.bloquearDia(clave(fecha));
         exigirAbiertas(fecha, r.tipo());
+        if (!aperturas.existsByFechaAndGrupo(fecha, grupoDe(r.tipo()))) {
+            throw new Excepciones.Conflicto("El pastor todavía no abrió las reservas de esta comida");
+        }
         Instant ahora = reloj.instant();
         dias.findById(fecha).filter(DiaComedor::isCerrado).ifPresent(d -> {
             throw new Excepciones.Conflicto("El comedor está cerrado ese día" + (d.getMotivo() == null ? "" : ": " + d.getMotivo()));
@@ -160,6 +181,8 @@ public class ReservaAlimentacionService {
         reserva.setMotivo(r.motivo().trim());
         reserva.setCurso(limpiar(r.curso()));
         reserva.setObservacion(limpiar(r.observacion()));
+        evidencias.exigirPropia(r.evidenciaId(), sesion.obtener().id());
+        reserva.setEvidenciaId(r.evidenciaId());
         reserva.setEstado(EstadoReserva.PENDIENTE);
         reserva.setCreadaPor(sesion.obtener().id());
         reserva.setCreadaEn(ahora);
@@ -206,10 +229,18 @@ public class ReservaAlimentacionService {
     public List<ReservaPastorResponse> delDia(LocalDate fecha, TipoReserva tipo) {
         var tipos = tipo == null ? List.of(TipoReserva.values()) : List.of(tipo);
         return reservas.delDia(fecha, tipos).stream().map(r -> {
-            var res = residentes.findById(r.getResidenteId()).orElseThrow();
-            String nombre = usuarios.findById(res.getUsuarioId()).map(u -> u.getNombreCompleto()).orElse("-");
-            return new ReservaPastorResponse(r.getId(), r.getResidenteId(), nombre, res.getCodigo(), r.getTipo(), r.getFecha(), r.getMotivo(),
-                    r.getCurso(), r.getObservacion(), r.getEstado(), r.getCreadaEn(), r.getComentarioDecision());
+            String nombre;
+            String codigo;
+            if (r.getResidenteId() != null) {
+                var res = residentes.findById(r.getResidenteId()).orElseThrow();
+                nombre = usuarios.findById(res.getUsuarioId()).map(u -> u.getNombreCompleto()).orElse("-");
+                codigo = res.getCodigo();
+            } else {
+                nombre = usuarios.findById(r.getUsuarioId()).map(u -> u.getNombreCompleto()).orElse("-");
+                codigo = "";
+            }
+            return new ReservaPastorResponse(r.getId(), r.getResidenteId(), nombre, codigo, r.getTipo(), r.getFecha(), r.getMotivo(),
+                    r.getCurso(), r.getObservacion(), r.getEstado(), r.getCreadaEn(), r.getComentarioDecision(), r.getEvidenciaId());
         }).toList();
     }
 
@@ -240,62 +271,35 @@ public class ReservaAlimentacionService {
         reserva.setDecididaEn(ahora);
         auditoria.registrar(sesion.obtener().id(), aprobar ? "RESERVA_APROBADA" : "RESERVA_RECHAZADA", "reserva_alimentacion", id, reserva.getComentarioDecision());
         String que = nombreTipo(reserva.getTipo()) + " del " + FECHA_CORTA.format(fecha);
-        avisos.alResidente(reserva.getResidenteId(), aprobar ? "Reserva aprobada" : "Reserva rechazada",
-                aprobar ? "Tu reserva de " + que + " fue aprobada." : "Tu reserva de " + que + " fue rechazada. Motivo: " + reserva.getComentarioDecision());
+        if (reserva.getResidenteId() != null) {
+            avisos.alResidente(reserva.getResidenteId(), aprobar ? "Reserva aprobada" : "Reserva rechazada",
+                    aprobar ? "Tu reserva de " + que + " fue aprobada." : "Tu reserva de " + que + " fue rechazada. Motivo: " + reserva.getComentarioDecision());
+        }
         return aResponse(reserva, null);
     }
 
-    // ------------------------------------------------------------------ el pastor crea una reserva
-
-    /** Hasta la 1 p. m. para el almuerzo y hasta las 6 p. m. para cena y desayuno; después no se abre hasta el día siguiente. */
-    static java.time.LocalTime limitePastor(TipoReserva tipo) {
-        return tipo == TipoReserva.ALMUERZO ? java.time.LocalTime.of(13, 0) : java.time.LocalTime.of(18, 0);
-    }
-
+    /** El pastor cancela una reserva activa en cualquier momento, con motivo. El residente puede volver a reservar si el plazo sigue abierto. */
     @Transactional
-    public ReservaResponse crearComoPastor(pe.upeu.resi.ResiAPI.dto.request.ReservaDtos.ReservaPastorRequest r) {
-        var residente = residentes.findById(r.residenteId()).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Residente no encontrado"));
-        if (!residente.isActivo()) {
-            throw new Excepciones.Conflicto("El residente no está activo");
+    public ReservaResponse cancelarComoPastor(Long id, String motivo) {
+        if (motivo == null || motivo.isBlank()) {
+            throw new Excepciones.SolicitudInvalida("Datos inválidos", Map.of("motivo", "El motivo es obligatorio"));
         }
-        if (r.tipo() == TipoReserva.DESAYUNO_FRIO && r.curso() != null && !r.curso().isBlank()) {
-            throw new Excepciones.SolicitudInvalida("Datos inválidos", Map.of("curso", "El desayuno frío no lleva curso o actividad"));
+        LocalDate fecha = reservas.findById(id).map(ReservaAlimentacion::getFecha)
+                .orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Reserva no encontrada"));
+        reservas.bloquearDia(clave(fecha));
+        var reserva = reservas.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Reserva no encontrada"));
+        if (!ACTIVAS.contains(reserva.getEstado())) {
+            throw new Excepciones.Conflicto("Esa reserva ya no está activa");
         }
         Instant ahora = reloj.instant();
-        LocalDate hoy = ahora.atZone(zona).toLocalDate();
-        LocalDate fecha = HorarioReservas.fechaQueSePideHoy(r.tipo(), hoy);
-        if (!fecha.equals(r.fecha()) || !HorarioReservas.seSirve(r.tipo(), fecha)) {
-            throw new Excepciones.Conflicto("Hoy solo se puede crear la reserva del " + FECHA_CORTA.format(fecha) + " para esa comida");
+        reserva.setEstado(EstadoReserva.CANCELADA_PASTOR);
+        reserva.setCanceladaPor(sesion.obtener().id());
+        reserva.setCanceladaEn(ahora);
+        reserva.setMotivoCancelacion(motivo.trim());
+        auditoria.registrar(sesion.obtener().id(), "RESERVA_CANCELADA_POR_PASTOR", "reserva_alimentacion", id, motivo.trim());
+        if (reserva.getResidenteId() != null) {
+            avisos.alResidente(reserva.getResidenteId(), "Reserva cancelada", "El pastor canceló tu reserva de " + nombreTipo(reserva.getTipo()) + " del " + FECHA_CORTA.format(fecha) + ". Motivo: " + motivo.trim());
         }
-        if (ahora.isAfter(hoy.atTime(limitePastor(r.tipo())).atZone(zona).toInstant())) {
-            throw new Excepciones.Conflicto("El plazo para crear reservas terminó a las " + HORA.format(limitePastor(r.tipo())) + "; se abre de nuevo mañana");
-        }
-        reservas.bloquearDia(clave(fecha));
-        exigirAbiertas(fecha, r.tipo());
-        dias.findById(fecha).filter(DiaComedor::isCerrado).ifPresent(d -> {
-            throw new Excepciones.Conflicto("El comedor está cerrado ese día" + (d.getMotivo() == null ? "" : ": " + d.getMotivo()));
-        });
-        if (reservas.existeEnTipos(residente.getId(), fecha, ACTIVAS, grupo(r.tipo()))) {
-            throw new Excepciones.Conflicto(r.tipo().esCena() ? "El residente ya tiene una reserva de cena para ese día" : "El residente ya tiene esa reserva para ese día");
-        }
-        var reserva = new ReservaAlimentacion();
-        reserva.setResidenteId(residente.getId());
-        reserva.setTipo(r.tipo());
-        reserva.setFecha(fecha);
-        reserva.setMotivo(r.motivo().trim());
-        reserva.setCurso(limpiar(r.curso()));
-        reserva.setEstado(EstadoReserva.RESERVADA);
-        reserva.setCreadaPor(sesion.obtener().id());
-        reserva.setCreadaEn(ahora);
-        reserva.setDecididaPor(sesion.obtener().id());
-        reserva.setDecididaEn(ahora);
-        try {
-            reserva = reservas.saveAndFlush(reserva);
-        } catch (DataIntegrityViolationException e) {
-            throw new Excepciones.Conflicto("El residente ya tiene una reserva activa para ese día");
-        }
-        auditoria.registrar(sesion.obtener().id(), "RESERVA_CREADA_POR_PASTOR", "reserva_alimentacion", reserva.getId(), r.tipo() + " " + fecha + " residente=" + residente.getId());
-        avisos.alResidente(residente.getId(), "Reserva registrada", "El pastor registró tu reserva de " + nombreTipo(r.tipo()) + " del " + FECHA_CORTA.format(fecha) + ".");
         return aResponse(reserva, null);
     }
 
@@ -324,6 +328,42 @@ public class ReservaAlimentacionService {
         }
     }
 
+    /** Comidas cuyas reservas el pastor ya abrió en esa fecha (ALMUERZO, CENA, DESAYUNO). */
+    @Transactional(readOnly = true)
+    public List<String> abiertas(LocalDate fecha) {
+        return aperturas.findByFecha(fecha).stream().map(AperturaReservas::getGrupo).toList();
+    }
+
+    /**
+     * El pastor (o monitor) abre las reservas de una comida para una fecha en que se sirve (nunca fines de semana; las cenas, de lunes a jueves).
+     * Abrir de nuevo una comida ya abierta no hace nada; una comida ya cerrada no se vuelve a abrir.
+     */
+    @Transactional
+    public void abrir(LocalDate fecha, String grupo) {
+        var tipos = tiposDe(grupo);
+        Instant ahora = reloj.instant();
+        if (fecha.isBefore(ahora.atZone(zona).toLocalDate())) {
+            throw new Excepciones.Conflicto("No se abren reservas de días pasados");
+        }
+        if (tipos.stream().noneMatch(t -> HorarioReservas.seSirve(t, fecha))) {
+            throw new Excepciones.Conflicto("Esa comida no se sirve ese día");
+        }
+        reservas.bloquearDia(clave(fecha));
+        if (cierres.existsByFechaAndGrupo(fecha, grupo)) {
+            throw new Excepciones.Conflicto("Las reservas de esta comida ya fueron cerradas");
+        }
+        if (aperturas.existsByFechaAndGrupo(fecha, grupo)) {
+            return;
+        }
+        var a = new AperturaReservas();
+        a.setFecha(fecha);
+        a.setGrupo(grupo);
+        a.setAbiertoPor(sesion.obtener().id());
+        a.setAbiertoEn(ahora);
+        aperturas.save(a);
+        auditoria.registrar(sesion.obtener().id(), "RESERVAS_ABIERTAS", "apertura_reservas", a.getId(), grupo + " " + fecha);
+    }
+
     /** Comidas cuyas reservas ya se cerraron en esa fecha (ALMUERZO, CENA, DESAYUNO). */
     @Transactional(readOnly = true)
     public List<String> cerradas(LocalDate fecha) {
@@ -341,11 +381,13 @@ public class ReservaAlimentacionService {
         Instant ahora = reloj.instant();
         var pendientes = reservas.pendientesDelDia(fecha, tipos);
         for (var r : pendientes) {
-            r.setEstado(EstadoReserva.CANCELADA_CIERRE);
-            r.setCanceladaPor(sesion.obtener().id());
-            r.setCanceladaEn(ahora);
+            // Una reserva que el pastor no revisó antes de cerrar queda rechazada, con el motivo a la vista del residente.
+            r.setEstado(EstadoReserva.RECHAZADA);
+            r.setDecididaPor(sesion.obtener().id());
+            r.setDecididaEn(ahora);
+            r.setComentarioDecision("Se cerraron las reservas sin revisar tu pedido");
             r.setMotivoCancelacion("Se cerraron las reservas sin revisar tu pedido");
-            avisos.alResidente(r.getResidenteId(), "Reserva cancelada", "Tu reserva de " + nombreTipo(r.getTipo()) + " del " + FECHA_CORTA.format(fecha) + " se canceló porque se cerraron las reservas.");
+            if (r.getResidenteId() != null) avisos.alResidente(r.getResidenteId(), "Reserva rechazada", "Tu reserva de " + nombreTipo(r.getTipo()) + " del " + FECHA_CORTA.format(fecha) + " fue rechazada: se cerraron las reservas sin revisarla.");
         }
         var c = new CierreReservas();
         c.setFecha(fecha);
@@ -360,11 +402,10 @@ public class ReservaAlimentacionService {
     /** CSV (separado por «;», con BOM para Excel) de las reservas aprobadas de una comida y fecha. */
     @Transactional(readOnly = true)
     public String exportar(LocalDate fecha, String grupo) {
-        var sb = new StringBuilder("\uFEFFCódigo;Nombre;Comida;Motivo;Curso\r\n");
+        var sb = new StringBuilder("\uFEFFCódigo;Nombre\r\n");
         for (var r : delDia(fecha, null)) {
             if (r.estado() == EstadoReserva.RESERVADA && tiposDe(grupo).contains(r.tipo())) {
-                sb.append(Csv.celda(r.codigo())).append(';').append(Csv.celda(r.residenteNombre())).append(';').append(Csv.celda(nombreTipo(r.tipo())))
-                        .append(';').append(Csv.celda(r.motivo())).append(';').append(Csv.celda(r.curso())).append("\r\n");
+                sb.append(Csv.celda(r.codigo())).append(';').append(Csv.celda(r.residenteNombre())).append("\r\n");
             }
         }
         return sb.toString();
@@ -424,6 +465,6 @@ public class ReservaAlimentacionService {
 
     ReservaResponse aResponse(ReservaAlimentacion r, AdvertenciaPermiso advertencia) {
         return new ReservaResponse(r.getId(), r.getTipo(), r.getFecha(), r.getMotivo(), r.getCurso(), r.getObservacion(), r.getEstado(),
-                r.getCreadaEn(), r.getCanceladaEn(), r.getMotivoCancelacion(), advertencia);
+                r.getCreadaEn(), r.getCanceladaEn(), r.getMotivoCancelacion(), advertencia, r.getEvidenciaId());
     }
 }

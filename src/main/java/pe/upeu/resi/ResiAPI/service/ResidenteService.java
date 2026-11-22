@@ -55,7 +55,11 @@ public class ResidenteService {
         }
         var usuario = usuarioService.crear(r.username(), r.password(), r.nombreCompleto(), Rol.RESIDENTE);
         var res = new Residente();
-        usuarioService.asignarIdentidad(usuario, r.dni(), r.fechaNacimiento());
+        usuarioService.asignarIdentidad(usuario, r.dni() == null || r.dni().isBlank() ? null : r.dni(), r.fechaNacimiento());
+        usuario.setEmail(r.email().trim());
+        usuario.setEmailVerificado(false);
+        res.setCarrera(r.carrera() == null || r.carrera().isBlank() ? null : r.carrera().trim());
+        res.setCiclo(r.ciclo() == null ? null : r.ciclo().shortValue());
         if (r.telefono() != null && !r.telefono().isBlank()) {
             if (usuarios.existsByTelefono(r.telefono().trim())) {
                 throw new Excepciones.Conflicto("Ese celular ya está registrado en otra cuenta");
@@ -175,6 +179,18 @@ public class ResidenteService {
         nueva.setDesde(ahora);
         asignaciones.save(nueva);
         auditoria.registrar(sesion.obtener().id(), "HABITACION_ASIGNADA", "residente", residenteId, "habitacion=" + hab.getNumero() + "-" + nueva.getCama());
+        return aResponse(res);
+    }
+
+    /** Quita al residente de su habitación y cama (la asignación se cierra, no se borra). */
+    @Transactional
+    public ResidenteResponse liberarHabitacion(Long residenteId) {
+        var res = residentes.findByIdForUpdate(residenteId).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Residente no encontrado"));
+        var vigente = asignaciones.findByResidenteIdAndHastaIsNull(residenteId)
+                .orElseThrow(() -> new Excepciones.Conflicto("El residente no tiene habitación asignada"));
+        vigente.setHasta(reloj.instant());
+        asignaciones.save(vigente);
+        auditoria.registrar(sesion.obtener().id(), "HABITACION_LIBERADA", "residente", residenteId, "habitacion_id=" + vigente.getHabitacionId());
         return aResponse(res);
     }
 

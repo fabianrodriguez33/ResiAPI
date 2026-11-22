@@ -117,14 +117,17 @@ class PerfilResidenteIntegracionTest extends PruebaIntegracion {
         assertEquals(401, mvc.perform(patch("/api/v1/residentes/yo").contentType(MediaType.APPLICATION_JSON).content("{\"ciclo\":3}")).andReturn().getResponse().getStatus());
 
         String user = "res_" + sufijo();
-        String base = "{\"username\":\"" + user + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Julio Fabián Rodríguez Bazán\",";
+        String contacto = "\"telefono\":\"" + celularAleatorio() + "\",\"email\":\"" + user + "@upeu.edu.pe\",";
+        String base = "{\"username\":\"" + user + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Julio Fabián Rodríguez Bazán\"," + contacto;
         for (String codigo : new String[] {"ABC", "12345", "res_" + user}) {
             mvc.perform(conToken(post("/api/v1/residentes"), admin).contentType(MediaType.APPLICATION_JSON)
                     .content(base + "\"codigo\":\"" + codigo + "\",\"dni\":\"" + dniAleatorio() + "\"}"))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.codigo").exists());
         }
-        mvc.perform(conToken(post("/api/v1/residentes"), admin).contentType(MediaType.APPLICATION_JSON).content(base + "\"codigo\":\"" + codigoUniversitario() + "\"}"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.dni").exists());
+        // El celular y el correo son obligatorios; el DNI ya no
+        mvc.perform(conToken(post("/api/v1/residentes"), admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"" + user + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Sin Contacto\",\"codigo\":\"" + codigoUniversitario() + "\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.telefono").exists()).andExpect(jsonPath("$.validationErrors.email").exists());
         mvc.perform(conToken(post("/api/v1/residentes"), admin).contentType(MediaType.APPLICATION_JSON)
                 .content(base + "\"codigo\":\"" + codigoUniversitario() + "\",\"dni\":\"" + dniAleatorio() + "\",\"fechaNacimiento\":\"2005-03-02\"}"))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.fechaNacimiento").value("2005-03-02"));

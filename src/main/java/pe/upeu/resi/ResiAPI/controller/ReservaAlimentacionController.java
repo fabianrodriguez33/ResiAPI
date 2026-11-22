@@ -70,15 +70,29 @@ public class ReservaAlimentacionController {
         return reservas.decidir(id, request.aprobar(), request.comentario());
     }
 
+    public record MotivoRequest(@jakarta.validation.constraints.NotBlank(message = "El motivo es obligatorio") @jakarta.validation.constraints.Size(max = 300) String motivo) {
+    }
+
     public record CierreRequest(@jakarta.validation.constraints.NotNull java.time.LocalDate fecha, @jakarta.validation.constraints.NotBlank String grupo) {
     }
 
     /** Cierra las reservas de una comida (ALMUERZO, CENA o DESAYUNO) de una fecha. Devuelve cuántas pendientes se cancelaron. */
-    @PostMapping("/pastor")
+    @PostMapping("/{id}/cancelar-pastor")
     @PreAuthorize("hasRole('PRECEPTOR')")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ReservaResponse crearComoPastor(@Valid @RequestBody pe.upeu.resi.ResiAPI.dto.request.ReservaDtos.ReservaPastorRequest request) {
-        return reservas.crearComoPastor(request);
+    public ReservaResponse cancelarComoPastor(@PathVariable Long id, @Valid @RequestBody MotivoRequest request) {
+        return reservas.cancelarComoPastor(id, request.motivo());
+    }
+
+    @PostMapping("/abrir")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public void abrir(@Valid @RequestBody CierreRequest request) {
+        reservas.abrir(request.fecha(), request.grupo());
+    }
+
+    @GetMapping("/aperturas")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.List<String> aperturas(@RequestParam java.time.LocalDate fecha) {
+        return reservas.abiertas(fecha);
     }
 
     @PostMapping("/cerrar")

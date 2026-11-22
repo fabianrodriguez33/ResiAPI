@@ -14,6 +14,10 @@ public final class ResidenteResponses {
     public record OcupacionResponse(long habitaciones, long capacidadTotal, long ocupados, long disponibles) {
     }
 
+    /** Quién ocupa hoy una cama de la habitación. */
+    public record OcupanteResponse(Long residenteId, String codigo, String nombreCompleto, String cama) {
+    }
+
     public record HabitacionResumen(Long id, String numero, String cama) {
     }
 

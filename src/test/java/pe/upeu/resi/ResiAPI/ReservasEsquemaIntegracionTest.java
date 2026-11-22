@@ -74,7 +74,7 @@ class ReservasEsquemaIntegracionTest extends PruebaIntegracion {
         segunda.setEstado(EstadoReserva.CANCELADA_PASTOR);
         reservas.saveAndFlush(segunda);
         reservas.saveAndFlush(reserva(id, usuario, TipoReserva.CENA_TAPER, dia, EstadoReserva.RESERVADA));
-        assertEquals(3, reservas.findAll().stream().filter(r -> r.getResidenteId() == id && r.getFecha().equals(dia)).count(),
+        assertEquals(3, reservas.findAll().stream().filter(r -> java.util.Objects.equals(r.getResidenteId(), id) && r.getFecha().equals(dia)).count(),
                 "las canceladas se conservan en el historial");
     }
 

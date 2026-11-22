@@ -163,6 +163,17 @@ public class CultoService {
         return aResponse(a, s);
     }
 
+    /** Residentes distintos que asistieron hoy a uno o a los dos cultos (asistencias no anuladas). */
+    @Transactional(readOnly = true)
+    public long presentesHoy() {
+        LocalDate hoy = reloj.instant().atZone(zona).toLocalDate();
+        Set<Long> ids = new java.util.HashSet<>();
+        for (var s : sesiones.findByFechaOrderByInicioAsc(hoy)) {
+            asistencias.findBySesionIdAndAnuladaFalse(s.getId()).forEach(a -> ids.add(a.getResidenteId()));
+        }
+        return ids.size();
+    }
+
     /** CSV (separado por «;», con BOM para Excel) de los presentes de un culto. */
     @Transactional(readOnly = true)
     public String exportarPresentes(Long sesionId) {
@@ -214,6 +225,27 @@ public class CultoService {
         a.setAnuladaPor(sesion.obtener().id());
         a.setMotivoAnulacion(motivo);
         auditoria.registrar(a.getAnuladaPor(), "ASISTENCIA_ANULADA", "asistencia_culto", asistenciaId, motivo);
+    }
+
+    /** El pastor elimina un culto creado por error mientras nadie haya registrado asistencia en él; luego puede crear otro. */
+    @Transactional
+    public void eliminarSesion(Long sesionId) {
+        var s = buscarSesion(sesionId);
+        if (!asistencias.findBySesionIdAndAnuladaFalse(sesionId).isEmpty()) {
+            throw new Excepciones.Conflicto("Este culto ya tiene asistencias registradas: anúlalas primero o termínalo");
+        }
+        asistencias.deleteAll(asistencias.findAll().stream().filter(a -> a.getSesionId().equals(sesionId)).toList());
+        sesiones.delete(s);
+        auditoria.registrar(sesion.obtener().id(), "CULTO_ELIMINADO", "sesion_culto", sesionId, s.getFecha() + " " + s.getTipo());
+    }
+
+    /** Fechas (en el rango pedido, de hasta un año) en las que el pastor abrió al menos un culto; el residente las usa para saber qué días hubo culto. */
+    @Transactional(readOnly = true)
+    public java.util.List<LocalDate> diasConCulto(LocalDate desde, LocalDate hasta) {
+        if (hasta.isBefore(desde) || desde.plusYears(1).isBefore(hasta)) {
+            throw new Excepciones.SolicitudInvalida("Rango de fechas inválido", java.util.Map.of("hasta", "Pida un rango de hasta un año"));
+        }
+        return sesiones.fechasConSesion(desde, hasta).stream().sorted().toList();
     }
 
     @Transactional(readOnly = true)

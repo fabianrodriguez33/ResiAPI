@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -24,10 +25,14 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.ResultActions;
 import pe.upeu.resi.ResiAPI.entity.DiaComedor;
 import pe.upeu.resi.ResiAPI.enums.Rol;
+import pe.upeu.resi.ResiAPI.entity.AperturaReservas;
+import pe.upeu.resi.ResiAPI.repository.AperturaReservasRepository;
 import pe.upeu.resi.ResiAPI.repository.DiaComedorRepository;
+import pe.upeu.resi.ResiAPI.repository.UsuarioRepository;
 import pe.upeu.resi.ResiAPI.repository.ResidenteRepository;
 
 /** Reservas de alimentación del residente: oferta, reservar, cancelar, historial, día cerrado, permisos y solicitudes simultáneas. */
@@ -39,15 +44,70 @@ class ReservasIntegracionTest extends PruebaIntegracion {
     DiaComedorRepository dias;
     @Autowired
     ResidenteRepository residentes;
+    @Autowired
+    AperturaReservasRepository aperturas;
+    @Autowired
+    pe.upeu.resi.ResiAPI.repository.CierreReservasRepository cierresRepo;
+    @Autowired
+    UsuarioRepository usuarios;
+
+    private final java.util.Map<String, Long> fotos = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Foto de la persona del token (se sube una sola vez por token): las reservas del residente la exigen. */
+    private long foto(String token) throws Exception {
+        Long id = fotos.get(token);
+        if (id == null) {
+            byte[] png = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0};
+            id = leer(mvc.perform(multipart("/api/v1/evidencias").file(new MockMultipartFile("archivo", "foto.png", "image/png", png))
+                    .header("Authorization", "Bearer " + token)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+            fotos.put(token, id);
+        }
+        return id;
+    }
+
+    /** Lo que hace el pastor: abrir las reservas de una comida (ALMUERZO, CENA o DESAYUNO) para una fecha. */
+    private synchronized void abrir(LocalDate fecha, String grupo) {
+        if (aperturas.existsByFechaAndGrupo(fecha, grupo)) return;
+        var a = new AperturaReservas();
+        a.setFecha(fecha);
+        a.setGrupo(grupo);
+        a.setAbiertoPor(usuarios.findAll().get(0).getId());
+        a.setAbiertoEn(Instant.now());
+        aperturas.saveAndFlush(a);
+    }
+
+    private static String grupoDe(String tipo) {
+        return tipo.startsWith("CENA") ? "CENA" : tipo.startsWith("DESAYUNO") ? "DESAYUNO" : "ALMUERZO";
+    }
+
+    /** Abre lo que se pide en un día: el almuerzo y la cena de hoy, y el desayuno de mañana. */
+    private void abrirOferta(LocalDate hoy) {
+        abrir(hoy, "ALMUERZO");
+        abrir(hoy, "CENA");
+        abrir(hoy.plusDays(1), "DESAYUNO");
+    }
 
     private String nuevoResidente() throws Exception {
         crearResidente(tokenDeRol(Rol.ADMINISTRADOR));
         return tokenDe(ultimoUsuario);
     }
 
-    private ResultActions reservar(String token, String tipo, LocalDate fecha, String extra) throws Exception {
+    /** Deja todo listo para reservar como lo hace la app: la comida abierta por el pastor y la foto subida. */
+    private void preparar(String token, String tipo, LocalDate fecha) throws Exception {
+        abrir(fecha, grupoDe(tipo));
+        foto(token);
+    }
+
+    private ResultActions enviarReserva(String token, String tipo, LocalDate fecha, String extra) throws Exception {
+        String completo = (extra.contains("\"curso\"") ? "" : ",\"curso\":\"Clases\"")
+                + (extra.contains("evidenciaId") ? "" : ",\"evidenciaId\":" + foto(token)) + extra;
         return mvc.perform(conToken(post("/api/v1/reservas"), token).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"tipo\":\"" + tipo + "\",\"fecha\":\"" + fecha + "\",\"motivo\":\"Clases\"" + extra + "}"));
+                .content("{\"tipo\":\"" + tipo + "\",\"fecha\":\"" + fecha + "\",\"motivo\":\"Clases\"" + completo + "}"));
+    }
+
+    private ResultActions reservar(String token, String tipo, LocalDate fecha, String extra) throws Exception {
+        preparar(token, tipo, fecha);
+        return enviarReserva(token, tipo, fecha, extra);
     }
 
     private ResultActions reservar(String token, String tipo, LocalDate fecha) throws Exception {
@@ -77,6 +137,7 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         LocalDate lunes = lunesAleatorio();
 
         fijarLima(lunes, 10, 0);
+        abrirOferta(lunes);
         var o = oferta(res);
         assertEquals(4, o.get("comidas").size());
         for (String t : new String[] {"CENA_TAPER", "CENA_SEGUNDO_TURNO", "ALMUERZO"}) {
@@ -87,6 +148,7 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         assertTrue(item(o, "DESAYUNO_FRIO").get("puedeReservar").asBoolean());
 
         fijarLima(lunes.plusDays(3), 17, 0); // jueves 17:00: cena y desayuno del viernes abiertos; almuerzo vencido
+        abrirOferta(lunes.plusDays(3));
         o = oferta(res);
         assertEquals("ABIERTA", item(o, "CENA_TAPER").get("estado").asText());
         assertEquals("VENCIDA", item(o, "ALMUERZO").get("estado").asText());
@@ -146,13 +208,20 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         mvc.perform(conToken(post("/api/v1/reservas"), res).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tipo\":\"CENA_TAPER\",\"fecha\":\"" + lunes + "\",\"motivo\":\"" + "x".repeat(301) + "\"}")).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.validationErrors.motivo").exists());
-        reservar(res, "DESAYUNO_FRIO", lunes.plusDays(1), ",\"curso\":\"Álgebra\"").andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.validationErrors.curso").exists());
+        // El curso y la foto son obligatorios; el desayuno también lleva curso
+        mvc.perform(conToken(post("/api/v1/reservas"), res).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tipo\":\"CENA_TAPER\",\"fecha\":\"" + lunes + "\",\"motivo\":\"Clases\",\"evidenciaId\":" + foto(res) + "}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.curso").exists());
+        mvc.perform(conToken(post("/api/v1/reservas"), res).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tipo\":\"CENA_TAPER\",\"fecha\":\"" + lunes + "\",\"motivo\":\"Clases\",\"curso\":\"Cálculo\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.validationErrors.evidenciaId").exists());
+        reservar(nuevoResidente(), "DESAYUNO_FRIO", lunes.plusDays(1), ",\"curso\":\"Álgebra\"").andExpect(status().isCreated())
+                .andExpect(jsonPath("$.curso").value("Álgebra"));
         // Los topes exactos sí se aceptan
         var otro = nuevoResidente();
         mvc.perform(conToken(post("/api/v1/reservas"), otro).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tipo\":\"CENA_TAPER\",\"fecha\":\"" + lunes + "\",\"motivo\":\"" + "m".repeat(300) + "\",\"curso\":\"" + "c".repeat(100)
-                        + "\",\"observacion\":\"" + "o".repeat(150) + "\"}")).andExpect(status().isCreated());
+                        + "\",\"observacion\":\"" + "o".repeat(150) + "\",\"evidenciaId\":" + foto(otro) + "}")).andExpect(status().isCreated());
     }
 
     @Test
@@ -169,6 +238,50 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         // El desayuno de mañana abre a las 00:00 de hoy
         fijarLima(lunes, 0, 0);
         reservar(nuevoResidente(), "DESAYUNO_FRIO", lunes.plusDays(1)).andExpect(status().isCreated());
+    }
+
+    // ------------------------------------------------------------------ apertura por el pastor
+
+    @Test
+    void lasReservasNoAbrenSolasElPastorLasAbreYSoloEnLosDiasQueSeSirve() throws Exception {
+        String res = nuevoResidente();
+        String pastor = tokenDeRol(Rol.PRECEPTOR);
+        LocalDate lunes = lunesAleatorio();
+        fijarLima(lunes, 10, 0);
+        // La base de pruebas conserva lo de corridas anteriores: se parte de un día sin aperturas ni cierres.
+        aperturas.deleteAll(aperturas.findByFecha(lunes));
+        cierresRepo.deleteAll(cierresRepo.findByFecha(lunes));
+        long foto = foto(res);
+        String cuerpo = "{\"tipo\":\"ALMUERZO\",\"fecha\":\"" + lunes + "\",\"motivo\":\"Clases\",\"curso\":\"Cálculo\",\"evidenciaId\":" + foto + "}";
+        String abrirAlmuerzo = "{\"fecha\":\"" + lunes + "\",\"grupo\":\"ALMUERZO\"}";
+
+        // Sin que el pastor abra, no se reserva aunque sea lunes y haya horario
+        assertEquals("SIN_ABRIR", item(oferta(res), "ALMUERZO").get("estado").asText());
+        assertFalse(item(oferta(res), "ALMUERZO").get("puedeReservar").asBoolean());
+        mvc.perform(conToken(post("/api/v1/reservas"), res).contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isConflict());
+
+        // Solo el pastor abre; abrir dos veces no falla
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), res).contentType(MediaType.APPLICATION_JSON).content(abrirAlmuerzo)).andExpect(status().isForbidden());
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), pastor).contentType(MediaType.APPLICATION_JSON).content(abrirAlmuerzo)).andExpect(status().isOk());
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), pastor).contentType(MediaType.APPLICATION_JSON).content(abrirAlmuerzo)).andExpect(status().isOk());
+        mvc.perform(conToken(get("/api/v1/reservas/aperturas").param("fecha", lunes.toString()), pastor)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("ALMUERZO"));
+        assertEquals("ABIERTA", item(oferta(res), "ALMUERZO").get("estado").asText());
+        assertEquals("SIN_ABRIR", item(oferta(res), "CENA_TAPER").get("estado").asText(), "abrir el almuerzo no abre la cena");
+        mvc.perform(conToken(post("/api/v1/reservas"), res).contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isCreated());
+
+        // No se abren fines de semana ni cenas del viernes ni días pasados
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), pastor).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fecha\":\"" + lunes.plusDays(5) + "\",\"grupo\":\"ALMUERZO\"}")).andExpect(status().isConflict());
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), pastor).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fecha\":\"" + lunes.plusDays(4) + "\",\"grupo\":\"CENA\"}")).andExpect(status().isConflict());
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), pastor).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fecha\":\"" + lunes.minusDays(7) + "\",\"grupo\":\"ALMUERZO\"}")).andExpect(status().isConflict());
+
+        // Una comida cerrada no se vuelve a abrir
+        mvc.perform(conToken(post("/api/v1/reservas/cerrar"), pastor).contentType(MediaType.APPLICATION_JSON).content(abrirAlmuerzo)).andExpect(status().isOk());
+        mvc.perform(conToken(post("/api/v1/reservas/abrir"), pastor).contentType(MediaType.APPLICATION_JSON).content(abrirAlmuerzo)).andExpect(status().isConflict());
+        assertEquals("CERRADAS", item(oferta(nuevoResidente()), "ALMUERZO").get("estado").asText());
     }
 
     // ------------------------------------------------------------------ exclusividad y cancelación
@@ -256,6 +369,7 @@ class ReservasIntegracionTest extends PruebaIntegracion {
         dia.setActualizadoPor(residentes.findById(residenteId).orElseThrow().getUsuarioId()); // referencia a un usuario real
         dia.setActualizadoEn(Instant.now());
         dias.saveAndFlush(dia);
+        abrirOferta(lunes);
 
         reservar(res, "ALMUERZO", lunes).andExpect(status().isConflict()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Feriado nacional")));
         var o = oferta(res);
@@ -344,6 +458,8 @@ class ReservasIntegracionTest extends PruebaIntegracion {
     }
 
     private List<Integer> enParalelo(String token, String tipoA, String tipoB, LocalDate fecha) throws Exception {
+        preparar(token, tipoA, fecha);
+        preparar(token, tipoB, fecha);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch listos = new CountDownLatch(2), salida = new CountDownLatch(1);
         List<Future<Integer>> futuros = new ArrayList<>();
@@ -351,7 +467,7 @@ class ReservasIntegracionTest extends PruebaIntegracion {
             futuros.add(pool.submit(() -> {
                 listos.countDown();
                 salida.await();
-                return reservar(token, tipo, fecha).andReturn().getResponse().getStatus();
+                return enviarReserva(token, tipo, fecha, "").andReturn().getResponse().getStatus();
             }));
         }
         listos.await();

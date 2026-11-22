@@ -57,7 +57,9 @@ public class ConfiguracionService {
             return;
         }
         try {
-            if (clave.startsWith("culto.")) {
+            if (clave.equals("ciclo.inicio") || clave.equals("ciclo.fin")) {
+                java.time.LocalDate.parse(valor);
+            } else if (clave.startsWith("culto.")) {
                 LocalTime.parse(valor);
             } else if (clave.endsWith("max_horas") || clave.endsWith("anticipacion_horas") || clave.endsWith("vigencia_horas")) {
                 if (Long.parseLong(valor) <= 0) {

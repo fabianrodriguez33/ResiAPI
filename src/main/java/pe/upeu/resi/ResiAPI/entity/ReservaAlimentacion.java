@@ -66,6 +66,13 @@ public class ReservaAlimentacion {
     @Column(name = "motivo_cancelacion")
     private String motivoCancelacion;
 
+    /** Titular cuando no es un residente: el pastor o monitor que reservó para sí mismo. */
+    @Column(name = "usuario_id")
+    private Long usuarioId;
+
+    @Column(name = "evidencia_id")
+    private Long evidenciaId;
+
     @Column(name = "decidida_por")
     private Long decididaPor;
 
