@@ -1,0 +1,5 @@
+# Proxy inverso con HTTPS automático (Let's Encrypt). SITE_HOST es el nombre público del servidor (ver docs/despliegue.md).
+{$SITE_HOST} {
+	encode gzip
+	reverse_proxy api:8080
+}
