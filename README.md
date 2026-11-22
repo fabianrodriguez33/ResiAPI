@@ -32,9 +32,9 @@ Desde el **emulador Android** la API es `http://10.0.2.2:8080`; desde un **telé
 
 | Rol | Usuario | Clave |
 |---|---|---|
-| Administrador | valor de `ADMIN_USUARIO` en `.env` | valor de `ADMIN_CLAVE` en `.env` |
+| Administrador | `admin` | la clave acordada por el equipo para la demostración |
 
-Las credenciales de demo no se guardan en el repositorio: se definen en el `.env` local antes del primer arranque. Para la demostración del curso, el equipo las comparte por separado. _(Pendiente: completar con las credenciales de demo acordadas.)_
+La clave no se publica en el repositorio: el usuario se define en `ADMIN_USUARIO` y la clave en `ADMIN_CLAVE` del `.env` local, antes del primer arranque. Para probar con el mismo usuario en otra máquina, usar esos mismos valores en su `.env`.
 
 ## Pruebas
 
