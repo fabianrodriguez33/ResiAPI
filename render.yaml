@@ -1,0 +1,52 @@
+# Despliegue en Render (plan gratuito): API en Docker + base PostgreSQL.
+# Uso: Render → New → Blueprint → elegir este repositorio y la rama. Solo pide ADMIN_USUARIO y ADMIN_CLAVE.
+# Límites del plan gratuito: la API se duerme tras ~15 min sin uso (tarda ~1 min en despertar), las fotos subidas
+# se pierden al reiniciar y la base gratuita caduca a los 30 días.
+services:
+  - type: web
+    name: resiup-api
+    runtime: docker
+    plan: free
+    envVars:
+      - key: SERVER_PORT
+        value: "10000"
+      - key: JAVA_TOOL_OPTIONS
+        value: -Xmx300m -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m
+      - key: TZ
+        value: America/Lima
+      - key: EVIDENCIAS_DIR
+        value: /app/evidencias
+      - key: DB_HOST
+        fromDatabase:
+          name: resiup-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: resiup-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: resiup-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: resiup-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: resiup-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: QR_SECRET
+        generateValue: true
+      - key: ADMIN_USUARIO
+        sync: false
+      - key: ADMIN_CLAVE
+        sync: false
+
+databases:
+  - name: resiup-db
+    plan: free
+    databaseName: resiup
+    user: resiup
