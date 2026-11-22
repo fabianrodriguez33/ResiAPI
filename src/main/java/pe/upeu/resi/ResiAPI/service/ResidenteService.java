@@ -55,8 +55,15 @@ public class ResidenteService {
         }
         var usuario = usuarioService.crear(r.username(), r.password(), r.nombreCompleto(), Rol.RESIDENTE);
         var res = new Residente();
-        usuarioService.asignarIdentidad(usuario, r.dni(), r.fechaNacimiento());
+        usuarioService.asignarIdentidad(usuario, r.dni() == null || r.dni().isBlank() ? null : r.dni(), r.fechaNacimiento());
+        usuario.setEmail(r.email().trim());
+        usuario.setEmailVerificado(false);
+        res.setCarrera(r.carrera() == null || r.carrera().isBlank() ? null : r.carrera().trim());
+        res.setCiclo(r.ciclo() == null ? null : r.ciclo().shortValue());
         if (r.telefono() != null && !r.telefono().isBlank()) {
+            if (usuarios.existsByTelefono(r.telefono().trim())) {
+                throw new Excepciones.Conflicto("Ese celular ya está registrado en otra cuenta");
+            }
             usuario.setTelefono(r.telefono().trim());
         }
         res.setUsuarioId(usuario.getId());
@@ -88,13 +95,8 @@ public class ResidenteService {
     @Transactional
     public ResidenteResponse actualizarPerfil(PerfilRequest r) {
         var res = residentes.findByIdForUpdate(residenteActual().getId()).orElseThrow();
-        perfil.actualizarContacto(usuarios.findById(res.getUsuarioId()).orElseThrow(), r.email(), r.telefono(), r.fechaNacimiento());
-        if (r.carrera() != null) {
-            res.setCarrera(r.carrera().isBlank() ? null : r.carrera().trim());
-        }
-        if (r.ciclo() != null) {
-            res.setCiclo(r.ciclo().shortValue());
-        }
+        // El residente solo cambia su correo y su celular (la foto va aparte); carrera, ciclo y nacimiento los gestiona la administración.
+        perfil.actualizarContacto(usuarios.findById(res.getUsuarioId()).orElseThrow(), r.email(), r.telefono(), null);
         auditoria.registrar(sesion.obtener().id(), "PERFIL_ACTUALIZADO", "residente", res.getId(), null);
         return aResponse(res);
     }
@@ -117,7 +119,11 @@ public class ResidenteService {
             usuario.setNombreCompleto(r.nombreCompleto().trim());
         }
         if (r.telefono() != null) {
-            usuario.setTelefono(r.telefono().isBlank() ? null : r.telefono().trim());
+            String nuevoTel = r.telefono().isBlank() ? null : r.telefono().trim();
+            if (nuevoTel != null && usuarios.existsByTelefonoAndIdNot(nuevoTel, usuario.getId())) {
+                throw new Excepciones.Conflicto("Ese celular ya está registrado en otra cuenta");
+            }
+            usuario.setTelefono(nuevoTel);
         }
         if (r.codigo() != null && !r.codigo().equals(res.getCodigo())) {
             if (residentes.existsByCodigo(r.codigo())) {
@@ -173,6 +179,18 @@ public class ResidenteService {
         nueva.setDesde(ahora);
         asignaciones.save(nueva);
         auditoria.registrar(sesion.obtener().id(), "HABITACION_ASIGNADA", "residente", residenteId, "habitacion=" + hab.getNumero() + "-" + nueva.getCama());
+        return aResponse(res);
+    }
+
+    /** Quita al residente de su habitación y cama (la asignación se cierra, no se borra). */
+    @Transactional
+    public ResidenteResponse liberarHabitacion(Long residenteId) {
+        var res = residentes.findByIdForUpdate(residenteId).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Residente no encontrado"));
+        var vigente = asignaciones.findByResidenteIdAndHastaIsNull(residenteId)
+                .orElseThrow(() -> new Excepciones.Conflicto("El residente no tiene habitación asignada"));
+        vigente.setHasta(reloj.instant());
+        asignaciones.save(vigente);
+        auditoria.registrar(sesion.obtener().id(), "HABITACION_LIBERADA", "residente", residenteId, "habitacion_id=" + vigente.getHabitacionId());
         return aResponse(res);
     }
 
@@ -261,6 +279,6 @@ public class ResidenteService {
         HabitacionResumen hab = asignaciones.findByResidenteIdAndHastaIsNull(r.getId())
                 .flatMap(a -> habitaciones.findById(a.getHabitacionId()).map(h -> new HabitacionResumen(h.getId(), h.getNumero(), a.getCama()))).orElse(null);
         return new ResidenteResponse(r.getId(), r.getUsuarioId(), r.getCodigo(), usuario.getNombreCompleto(), usuario.getTelefono(), r.isActivo(), hab, r.isPuedeSolicitarSolo(), usuario.getEmail(), r.getCarrera(),
-                r.getCiclo() == null ? null : r.getCiclo().intValue(), usuario.getDni(), usuario.getFechaNacimiento(), usuario.isEmailVerificado());
+                r.getCiclo() == null ? null : r.getCiclo().intValue(), usuario.getDni(), usuario.getFechaNacimiento(), usuario.isEmailVerificado(), usuario.getFotoEvidenciaId());
     }
 }

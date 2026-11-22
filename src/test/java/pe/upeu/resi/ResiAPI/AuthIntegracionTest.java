@@ -22,6 +22,9 @@ import pe.upeu.resi.ResiAPI.enums.Rol;
 
 class AuthIntegracionTest extends PruebaIntegracion {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    pe.upeu.resi.ResiAPI.repository.ResidenteRepository residentes;
+
     @Autowired
     JwtEncoder encoder;
 
@@ -39,6 +42,19 @@ class AuthIntegracionTest extends PruebaIntegracion {
                 .andExpect(jsonPath("$.expiraEnSegundos").value(3600))
                 .andExpect(jsonPath("$.roles[0]").value("PRECEPTOR"))
                 .andExpect(jsonPath("$.permisos").isNotEmpty());
+    }
+
+    @Test
+    void elResidenteEntraConSuUsuarioOConSuCodigoYElPastorSoloConSuUsuario() throws Exception {
+        long id = crearResidente(tokenDeRol(Rol.ADMINISTRADOR));
+        String usuario = ultimoUsuario;
+        String codigo = residentes.findById(id).orElseThrow().getCodigo();
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(login(usuario, CLAVE))).andExpect(status().isOk());
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(login(codigo, CLAVE))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty());
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(login(codigo, "otra-clave-xx"))).andExpect(status().isUnauthorized());
+        // Quien no es residente no tiene código: solo entra con su usuario
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(login("202400000", CLAVE))).andExpect(status().isUnauthorized());
     }
 
     @Test

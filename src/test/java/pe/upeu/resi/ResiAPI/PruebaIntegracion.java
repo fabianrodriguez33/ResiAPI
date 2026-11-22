@@ -42,6 +42,18 @@ public abstract class PruebaIntegracion {
     }
 
     /** Fija el reloj en una hora local de Lima (UTC-5, sin horario de verano). */
+    /** El pastor aprueba un permiso en revisión: queda APROBADO y disponible para garita. */
+    protected void aprobarComoPastor(String tokenPastor, long id) throws Exception {
+        mvc.perform(conToken(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/permisos/solicitudes/" + id + "/decision"), tokenPastor)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"aprobar\":true}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.estado").value("APROBADO"));
+    }
+
+    protected String celularUnico() {
+        return "9" + (10_000_000 + new java.util.Random().nextInt(89_000_000));
+    }
+
     protected void fijarLima(java.time.LocalDate fecha, int hora, int minuto) {
         reloj.fijar(fecha.atTime(hora, minuto).atZone(java.time.ZoneId.of("America/Lima")).toInstant());
     }
@@ -111,7 +123,8 @@ public abstract class PruebaIntegracion {
         String user = "res_" + sufijo();
         var res = mvc.perform(conToken(MockMvcRequestBuilders.post("/api/v1/residentes"), tokenAdmin).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"" + user + "\",\"password\":\"" + CLAVE + "\",\"nombreCompleto\":\"Residente " + user
-                        + "\",\"codigo\":\"" + codigoUniversitario() + "\",\"dni\":\"" + dniAleatorio() + "\"}")).andReturn().getResponse();
+                        + "\",\"codigo\":\"" + codigoUniversitario() + "\",\"dni\":\"" + dniAleatorio() + "\",\"telefono\":\"" + celularAleatorio()
+                        + "\",\"email\":\"" + user + "@upeu.edu.pe\"}")).andReturn().getResponse();
         if (res.getStatus() != 201) {
             throw new IllegalStateException("No se pudo crear el residente: " + res.getStatus());
         }
@@ -125,6 +138,11 @@ public abstract class PruebaIntegracion {
     }
 
     /** DNI de 8 dígitos al azar; es único en la base. */
+    /** Celular de 9 dígitos al azar (único en la práctica); el servidor lo exige al registrar un residente. */
+    protected String celularAleatorio() {
+        return "9" + String.format("%08d", java.util.concurrent.ThreadLocalRandom.current().nextInt(100_000_000));
+    }
+
     protected String dniAleatorio() {
         return String.valueOf(10_000_000 + java.util.concurrent.ThreadLocalRandom.current().nextInt(90_000_000));
     }

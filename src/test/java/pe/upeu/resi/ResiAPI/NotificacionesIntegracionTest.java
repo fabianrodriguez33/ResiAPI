@@ -37,8 +37,9 @@ class NotificacionesIntegracionTest extends PruebaIntegracion {
 
         // El padre deja teléfono y un correo verificado, y registra su celular para el push.
         String correoPadre = "padre_" + sufijo() + "@upeu.edu.pe";
+        String celularPadre = celularUnico();
         mvc.perform(conToken(patch("/api/v1/perfil"), padre).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"" + correoPadre + "\",\"telefono\":\"987654321\"}")).andExpect(status().isOk());
+                .content("{\"email\":\"" + correoPadre + "\",\"telefono\":\"" + celularPadre + "\"}")).andExpect(status().isOk());
         mvc.perform(conToken(post("/api/v1/perfil/correo/codigo"), padre)).andExpect(status().isNoContent());
         mvc.perform(conToken(post("/api/v1/perfil/correo/verificar"), padre).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"codigo\":\"" + correo.ultimoCodigo(correoPadre) + "\"}")).andExpect(status().isOk());
@@ -61,13 +62,16 @@ class NotificacionesIntegracionTest extends PruebaIntegracion {
                 .andExpect(jsonPath("$.contenido[0].leida").value(false));
         esperar(() -> correo.push.stream().anyMatch(m -> m.destino().equals(token) && m.titulo().equals("Permiso por aprobar")));
         esperar(() -> correo.correos.stream().anyMatch(m -> m.destino().equals(correoPadre.toLowerCase())));
-        esperar(() -> correo.sms.stream().anyMatch(m -> m.destino().equals("987654321") && m.texto().contains("Permiso por aprobar")));
+        esperar(() -> correo.sms.stream().anyMatch(m -> m.destino().equals(celularPadre) && m.texto().contains("Permiso por aprobar")));
 
         // El padre aprueba: avisa al residente y al pastor.
         mvc.perform(conToken(post("/api/v1/familia/solicitudes/" + solicitud + "/decision"), padre).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"aprobar\":true}")).andExpect(status().isOk());
+        mvc.perform(conToken(get("/api/v1/notificaciones"), residente)).andExpect(jsonPath("$.contenido[0].titulo").value("Permiso en revisión"));
+        mvc.perform(conToken(get("/api/v1/notificaciones"), pastor)).andExpect(jsonPath("$.contenido[0].titulo").value("Permiso por revisar"));
+        // El pastor lo aprueba: avisa al residente y al padre, y recién entonces garita lo reconoce.
+        aprobarComoPastor(pastor, solicitud);
         mvc.perform(conToken(get("/api/v1/notificaciones"), residente)).andExpect(jsonPath("$.contenido[0].titulo").value("Permiso aprobado"));
-        mvc.perform(conToken(get("/api/v1/notificaciones"), pastor)).andExpect(jsonPath("$.contenido[0].titulo").value("Nuevo permiso aprobado"));
 
         // Leer: una por una y todas; nadie más puede tocar mis avisos.
         long aviso = leer(mvc.perform(conToken(get("/api/v1/notificaciones"), padre)).andReturn().getResponse().getContentAsString()).get("contenido").get(0).get("id").asLong();

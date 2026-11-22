@@ -32,7 +32,7 @@ public class CultoController {
     public record AbrirSesionRequest(@NotNull(message = "El tipo de culto es obligatorio") TipoCulto tipo) {
     }
 
-    public record RegistrarAsistenciaRequest(@NotBlank(message = "El QR es obligatorio") @Size(max = 120) String qr) {
+    public record RegistrarAsistenciaRequest(@Size(max = 120) String qr, @jakarta.validation.constraints.Pattern(regexp = "^(\\d{9})?$", message = "El código universitario tiene 9 dígitos") String codigo) {
     }
 
     public record AnularRequest(@NotBlank(message = "El motivo es obligatorio") @Size(max = 300) String motivo) {
@@ -52,6 +52,33 @@ public class CultoController {
         return cultos.deHoy();
     }
 
+    @GetMapping("/cultos/presentes-hoy")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.Map<String, Long> presentesHoy() {
+        return java.util.Map.of("residentes", cultos.presentesHoy());
+    }
+
+    @GetMapping("/cultos/sesiones")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public List<SesionCultoResponse> deFecha(@RequestParam java.time.LocalDate fecha) {
+        return cultos.deFecha(fecha);
+    }
+
+    @PostMapping("/cultos/sesiones/{id}/reabrir")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public SesionCultoResponse reabrir(@PathVariable Long id) {
+        return cultos.reabrir(id);
+    }
+
+    @GetMapping(value = "/cultos/sesiones/{id}/exportar", produces = "text/csv;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public org.springframework.http.ResponseEntity<byte[]> exportar(@PathVariable Long id) {
+        var s = cultos.obtener(id);
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"culto-" + s.tipo().name().toLowerCase() + "-" + s.fecha() + ".csv\"")
+                .body(cultos.exportarPresentes(id).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     @GetMapping("/cultos/sesiones/{id}")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public SesionCultoResponse obtener(@PathVariable Long id) {
@@ -62,7 +89,12 @@ public class CultoController {
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     @ResponseStatus(HttpStatus.CREATED)
     public AsistenciaResponse registrar(@PathVariable Long id, @Valid @RequestBody RegistrarAsistenciaRequest request) {
-        return cultos.registrar(id, request.qr());
+        boolean conCodigo = request.codigo() != null && !request.codigo().isBlank();
+        boolean conQr = request.qr() != null && !request.qr().isBlank();
+        if (conCodigo == conQr) {
+            throw new pe.upeu.resi.ResiAPI.exception.Excepciones.SolicitudInvalida("Indica el QR o el código universitario");
+        }
+        return conCodigo ? cultos.registrarPorCodigo(id, request.codigo()) : cultos.registrar(id, request.qr());
     }
 
     @GetMapping("/cultos/sesiones/{id}/presentes")
@@ -77,6 +109,12 @@ public class CultoController {
         return cultos.pendientes(id);
     }
 
+    @org.springframework.web.bind.annotation.DeleteMapping("/cultos/sesiones/{id}")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public void eliminarSesion(@PathVariable Long id) {
+        cultos.eliminarSesion(id);
+    }
+
     @PostMapping("/cultos/sesiones/{id}/cerrar")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public SesionCultoResponse cerrar(@PathVariable Long id) {
@@ -87,6 +125,13 @@ public class CultoController {
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public void anular(@PathVariable Long id, @Valid @RequestBody AnularRequest request) {
         cultos.anular(id, request.motivo());
+    }
+
+    @GetMapping("/residentes/yo/dias-con-culto")
+    @PreAuthorize("hasRole('RESIDENTE')")
+    public List<java.time.LocalDate> diasConCulto(@RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate desde,
+                                                  @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate hasta) {
+        return cultos.diasConCulto(desde, hasta);
     }
 
     @GetMapping("/residentes/yo/asistencias")

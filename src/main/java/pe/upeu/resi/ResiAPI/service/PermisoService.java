@@ -88,20 +88,22 @@ public class PermisoService {
     private final NotificacionService avisos;
     private final HabilitacionService habilitacion;
     private final SesionActual sesion;
+    private final AutorizacionPermisoService autorizaciones;
     private final Clock reloj;
     private final ZoneId zona;
 
     // ------------------------------------------------------------------ solicitud
 
-    /** Solicitud enviada por el propio residente: solo corto y largo. Sin el privilegio, pasa primero por su apoderado. */
+    /** Solicitud enviada por el propio residente. Sin el privilegio (y siempre para pernoctar), pasa primero por su apoderado. */
     @Transactional
     public SolicitudResponse crear(SolicitudRequest r) {
         Residente residente = residenteService.residenteActual();
         habilitacion.exigirHabilitado(residente, true);
-        if (r.tipo() == TipoPermiso.PERNOCTE) {
-            throw new Excepciones.Prohibido("Los permisos para pernoctar fuera los envía tu padre, madre o apoderado desde su cuenta");
-        }
-        boolean requiereApoderado = !residente.isPuedeSolicitarSolo() && config.booleano("permiso.apoderado.requerido", true);
+        // Con una autorización vigente para ese tipo (hoja firmada) el estudiante envía directo al pastor. El interruptor antiguo
+        // solo vale para corto y largo y nunca para pernoctar. Sin ninguna de las dos, primero acepta el apoderado.
+        boolean autorizado = autorizaciones.vigente(residente.getId(), r.tipo(), r.salida().atZone(zona).toLocalDate())
+                || (r.tipo() != TipoPermiso.PERNOCTE && residente.isPuedeSolicitarSolo());
+        boolean requiereApoderado = !autorizado && config.booleano("permiso.apoderado.requerido", true);
         if (requiereApoderado && vinculos.findByResidenteId(residente.getId()).isEmpty()) {
             throw new Excepciones.Conflicto("No tienes un apoderado registrado; comunícate con administración");
         }
@@ -140,8 +142,11 @@ public class PermisoService {
             throw new Excepciones.Conflicto(HorarioEnvio.MENSAJE);
         }
         Map<String, String> errores = new java.util.LinkedHashMap<>();
-        if (r.salida().isBefore(ahora.minus(Duration.ofMinutes(5)))) {
-            errores.put("salida", "La salida no puede estar en el pasado");
+        // Fecha estricta (hora de Lima): no se pide un permiso para un día anterior a hoy ni para una hora que ya pasó (5 min de margen).
+        if (r.salida().atZone(zona).toLocalDate().isBefore(momentoDeEnvio.atZone(zona).toLocalDate())) {
+            errores.put("salida", "La fecha de salida no puede ser anterior a hoy");
+        } else if (r.salida().isBefore(momentoDeEnvio.minus(Duration.ofMinutes(5)))) {
+            errores.put("salida", "La hora de salida ya pasó");
         }
         if (!r.retorno().isAfter(r.salida())) {
             errores.put("retorno", "El retorno debe ser posterior a la salida");
@@ -184,12 +189,8 @@ public class PermisoService {
             s.setResponsableCelular(r.responsableCelular().trim());
             s.setAcompanante(r.acompanante() == null || r.acompanante().isBlank() ? "Nadie" : r.acompanante().trim());
         }
-        s.setEstado(requiereApoderado ? EstadoSolicitud.PENDIENTE_APODERADO : EstadoSolicitud.APROBADO);
-        if (!requiereApoderado) {
-            // Lo envía el padre/madre, o el residente con el privilegio firmado: no hay nadie más que lo apruebe.
-            s.setDecididoPor(sesion.obtener().id());
-            s.setDecididoEn(ahora);
-        }
+        // Todo permiso lo revisa el pastor (o monitor) antes de llegar a garita; si hace falta, primero acepta el padre/madre.
+        s.setEstado(requiereApoderado ? EstadoSolicitud.PENDIENTE_APODERADO : EstadoSolicitud.PENDIENTE_PRECEPTOR);
         s.setCreadoEn(ahora);
         s.setActualizadoEn(ahora);
         s = solicitudes.save(s);
@@ -211,9 +212,9 @@ public class PermisoService {
             avisos.aApoderadosDe(residenteId, "Permiso por aprobar", nombre + " pidió un permiso " + s.getTipo().name().toLowerCase() + detalle + ". Apruébalo o recházalo en la app.");
         } else {
             if (s.getOrigen() == OrigenSolicitud.APODERADO) {
-                avisos.alResidente(residenteId, "Permiso aprobado", "Tu familia te dejó un permiso " + s.getTipo().name().toLowerCase() + detalle + ".");
+                avisos.alResidente(residenteId, "Permiso enviado por tu familia", "Tu familia envió un permiso " + s.getTipo().name().toLowerCase() + detalle + ". El pastor lo revisará.");
             }
-            avisos.aRol(Rol.PRECEPTOR, "Nuevo permiso aprobado", nombre + ": permiso " + s.getTipo().name().toLowerCase() + detalle + ".");
+            avisos.aRol(Rol.PRECEPTOR, "Permiso por revisar", nombre + ": permiso " + s.getTipo().name().toLowerCase() + detalle + ".");
         }
     }
 
@@ -310,6 +311,14 @@ public class PermisoService {
         return cancelarSolicitud(s);
     }
 
+    /** Permisos aprobados hoy (hora de Lima): el contador del inicio del pastor, que vuelve a empezar cada día. */
+    @Transactional(readOnly = true)
+    public long aprobadosHoy() {
+        LocalDate hoy = reloj.instant().atZone(zona).toLocalDate();
+        return solicitudes.countByEstadoAndDecididoEnGreaterThanEqualAndDecididoEnLessThan(
+                EstadoSolicitud.APROBADO, hoy.atStartOfDay(zona).toInstant(), hoy.plusDays(1).atStartOfDay(zona).toInstant());
+    }
+
     // ------------------------------------------------------------------ resumen para el pastor
 
     /** Asistencia a cultos y limpieza de los últimos 30 días del residente de la solicitud (informativo, no aprueba nada). */
@@ -388,8 +397,8 @@ public class PermisoService {
     }
 
     /**
-     * La aceptación del padre/madre (o del apoderado con enlace) deja el permiso aprobado: el pastor solo consulta la lista.
-     * No se aprueba un permiso cuya hora de salida ya pasó.
+     * La aceptación del padre/madre (o del apoderado con enlace) pasa el permiso al pastor; su rechazo lo cierra.
+     * No se acepta un permiso cuya hora de salida ya pasó.
      */
     private void resolverPorFamilia(SolicitudPermiso s, boolean aprobar, Long usuarioId) {
         Instant ahora = reloj.instant();
@@ -399,16 +408,49 @@ public class PermisoService {
         if (aprobar && !s.getSalidaSolicitada().isAfter(ahora)) {
             throw new Excepciones.Conflicto("El permiso venció: la hora de salida solicitada ya pasó");
         }
-        s.setEstado(aprobar ? EstadoSolicitud.APROBADO : EstadoSolicitud.RECHAZADO);
-        s.setDecididoPor(usuarioId);
-        s.setDecididoEn(ahora);
+        s.setEstado(aprobar ? EstadoSolicitud.PENDIENTE_PRECEPTOR : EstadoSolicitud.RECHAZADO);
         s.setActualizadoEn(ahora);
         String detalle = " (" + cuando(s.getSalidaSolicitada()) + " a " + cuando(s.getRetornoSolicitado()) + ")";
-        avisos.alResidente(s.getResidenteId(), aprobar ? "Permiso aprobado" : "Permiso rechazado",
-                aprobar ? "Tu familia aprobó tu permiso" + detalle + "." : "Tu familia no aprobó tu permiso" + detalle + ".");
         if (aprobar) {
-            avisos.aRol(Rol.PRECEPTOR, "Nuevo permiso aprobado", avisos.nombreDe(s.getResidenteId()) + ": permiso " + s.getTipo().name().toLowerCase() + detalle + ".");
+            avisos.alResidente(s.getResidenteId(), "Permiso en revisión", "Tu familia aceptó tu permiso" + detalle + ". Ahora lo revisa el pastor.");
+            avisos.aRol(Rol.PRECEPTOR, "Permiso por revisar", avisos.nombreDe(s.getResidenteId()) + ": permiso " + s.getTipo().name().toLowerCase() + detalle + ".");
+        } else {
+            s.setDecididoPor(usuarioId);
+            s.setDecididoEn(ahora);
+            avisos.alResidente(s.getResidenteId(), "Permiso rechazado", "Tu familia no aprobó tu permiso" + detalle + ".");
         }
+    }
+
+    /** El pastor (o monitor) aprueba o rechaza un permiso en revisión; al aprobarlo queda disponible para garita. */
+    @Transactional
+    public SolicitudResponse decidirComoPastor(Long id, boolean aprobar, String comentario) {
+        var s = solicitudes.findByIdForUpdate(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Solicitud no encontrada"));
+        if (s.getEstado() != EstadoSolicitud.PENDIENTE_PRECEPTOR) {
+            throw new Excepciones.Conflicto("Esta solicitud ya no está en revisión");
+        }
+        Instant ahora = reloj.instant();
+        if (aprobar) {
+            if (habilitacion.suspendidoParaSalida(residentes.findById(s.getResidenteId()).orElseThrow(), s.getSalidaSolicitada())) {
+                throw new Excepciones.Conflicto("El residente está suspendido esta semana: la solicitud no se puede aprobar");
+            }
+            if (!s.getSalidaSolicitada().isAfter(ahora)) {
+                throw new Excepciones.Conflicto("El permiso venció: la hora de salida solicitada ya pasó");
+            }
+        } else if (comentario == null || comentario.isBlank()) {
+            throw new Excepciones.SolicitudInvalida("Indique el motivo del rechazo", Map.of("comentario", "El motivo del rechazo es obligatorio"));
+        }
+        s.setEstado(aprobar ? EstadoSolicitud.APROBADO : EstadoSolicitud.RECHAZADO);
+        s.setComentarioDecision(comentario == null || comentario.isBlank() ? null : comentario.trim());
+        s.setDecididoPor(sesion.obtener().id());
+        s.setDecididoEn(ahora);
+        s.setActualizadoEn(ahora);
+        auditoria.registrar(sesion.obtener().id(), aprobar ? "PASTOR_APROBO_PERMISO" : "PASTOR_RECHAZO_PERMISO", "solicitud_permiso", id, s.getComentarioDecision());
+        String detalle = " (" + cuando(s.getSalidaSolicitada()) + " a " + cuando(s.getRetornoSolicitado()) + ")";
+        String titulo = aprobar ? "Permiso aprobado" : "Permiso rechazado";
+        String texto = (aprobar ? "El pastor aprobó el permiso" : "El pastor rechazó el permiso") + detalle + "." + (aprobar || s.getComentarioDecision() == null ? "" : " Motivo: " + s.getComentarioDecision());
+        avisos.alResidente(s.getResidenteId(), titulo, texto);
+        avisos.aApoderadosDe(s.getResidenteId(), titulo, avisos.nombreDe(s.getResidenteId()) + ": " + texto);
+        return aResponse(s, false);
     }
 
     // ------------------------------------------------------------------ apoderado
@@ -621,7 +663,9 @@ public class PermisoService {
     @Transactional
     public int cancelarPendientesDeSuspendidos() {
         int cancelados = 0;
-        for (var s : solicitudes.findByEstado(EstadoSolicitud.PENDIENTE_APODERADO)) {
+        var pendientes = new java.util.ArrayList<>(solicitudes.findByEstado(EstadoSolicitud.PENDIENTE_APODERADO));
+        pendientes.addAll(solicitudes.findByEstado(EstadoSolicitud.PENDIENTE_PRECEPTOR));
+        for (var s : pendientes) {
             var residente = residentes.findById(s.getResidenteId()).orElseThrow();
             if (habilitacion.suspendidoParaSalida(residente, s.getSalidaSolicitada())) {
                 cambiarEstado(s, EstadoSolicitud.CANCELADO);
@@ -700,7 +744,13 @@ public class PermisoService {
         return new SolicitudResponse(s.getId(), residente.getId(), residente.getCodigo(), nombre, s.getTipo(), s.getMotivo(), s.getDestino(),
                 s.getSalidaSolicitada(), s.getRetornoSolicitado(), s.getRetornoAutorizado(), s.getEstado(), s.isRequiereApoderado(),
                 s.getDecididoEn(), s.getComentarioDecision(), s.getCreadoEn(), amp, jus,
-                s.getOrigen(), s.getResponsableNombre(), s.getResponsableCelular(), s.getAcompanante());
+                s.getOrigen(), s.getResponsableNombre(), s.getResponsableCelular(), s.getAcompanante(),
+                marcaDeGarita(s.getId(), TipoMovimiento.SALIDA), marcaDeGarita(s.getId(), TipoMovimiento.RETORNO));
+    }
+
+    /** Hora en que garita registró la salida o la entrada con este permiso (null si aún no ocurrió). */
+    private Instant marcaDeGarita(Long solicitudId, TipoMovimiento tipo) {
+        return movimientos.findFirstBySolicitudIdAndTipoAndAnuladoFalseOrderByRegistradoEnAsc(solicitudId, tipo).map(m -> m.getRegistradoEn()).orElse(null);
     }
 
     private AmpliacionResponse aResponse(AmpliacionPermiso a) {

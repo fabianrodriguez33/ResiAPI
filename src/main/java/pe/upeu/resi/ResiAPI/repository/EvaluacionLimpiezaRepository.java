@@ -10,9 +10,16 @@ public interface EvaluacionLimpiezaRepository extends JpaRepository<EvaluacionLi
 
     boolean existsByResidenteIdAndFecha(Long residenteId, LocalDate fecha);
 
+    /** Promedio de limpieza (sobre 20) por residente en el periodo: filas [residenteId, promedio]. */
+    @org.springframework.data.jpa.repository.Query("select e.residenteId, avg(e.total) from EvaluacionLimpieza e where e.fecha between :desde and :hasta group by e.residenteId")
+    java.util.List<Object[]> promedioPorResidente(@org.springframework.data.repository.query.Param("desde") LocalDate desde,
+                                                  @org.springframework.data.repository.query.Param("hasta") LocalDate hasta);
+
     java.util.List<EvaluacionLimpieza> findByResidenteIdInAndFecha(java.util.Collection<Long> residenteIds, LocalDate fecha);
 
     java.util.List<EvaluacionLimpieza> findByHabitacionIdAndFecha(Long habitacionId, LocalDate fecha);
+
+    java.util.List<EvaluacionLimpieza> findByFecha(LocalDate fecha);
 
     Page<EvaluacionLimpieza> findByResidenteIdOrderByFechaDesc(Long residenteId, Pageable pageable);
 

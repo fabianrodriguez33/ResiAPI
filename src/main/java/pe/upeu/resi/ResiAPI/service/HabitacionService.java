@@ -22,8 +22,20 @@ public class HabitacionService {
 
     private final HabitacionRepository habitaciones;
     private final AsignacionHabitacionRepository asignaciones;
+    private final pe.upeu.resi.ResiAPI.repository.ResidenteRepository residentes;
+    private final pe.upeu.resi.ResiAPI.repository.UsuarioRepository usuarios;
     private final AuditoriaService auditoria;
     private final SesionActual sesion;
+
+    /** Los residentes que ocupan hoy la habitación, con su cama. */
+    @Transactional(readOnly = true)
+    public List<pe.upeu.resi.ResiAPI.dto.response.ResidenteResponses.OcupanteResponse> ocupantes(Long habitacionId) {
+        return asignaciones.findByHabitacionIdAndHastaIsNull(habitacionId).stream().map(a -> {
+            var r = residentes.findById(a.getResidenteId()).orElseThrow();
+            String nombre = usuarios.findById(r.getUsuarioId()).map(u -> u.getNombreCompleto()).orElse("-");
+            return new pe.upeu.resi.ResiAPI.dto.response.ResidenteResponses.OcupanteResponse(r.getId(), r.getCodigo(), nombre, a.getCama());
+        }).sorted(java.util.Comparator.comparing(o -> o.cama() == null ? "" : o.cama())).toList();
+    }
 
     @Transactional(readOnly = true)
     public List<HabitacionResponse> listar() {

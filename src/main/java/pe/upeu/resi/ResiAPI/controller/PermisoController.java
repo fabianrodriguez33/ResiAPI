@@ -86,10 +86,22 @@ public class PermisoController {
         return permisos.listar(estado, pagina(pagina, tamanio));
     }
 
+    @GetMapping("/solicitudes/aprobados-hoy")
+    @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
+    public java.util.Map<String, Long> aprobadosHoy() {
+        return java.util.Map.of("aprobados", permisos.aprobadosHoy());
+    }
+
     @GetMapping("/solicitudes/de-suspendidos")
     @PreAuthorize("hasAnyRole('PRECEPTOR','ADMINISTRADOR')")
     public java.util.List<SolicitudResponse> deSuspendidos() {
         return permisos.deResidentesSuspendidos();
+    }
+
+    @PostMapping("/solicitudes/{id}/decision")
+    @PreAuthorize("hasRole('PRECEPTOR')")
+    public SolicitudResponse decidir(@PathVariable Long id, @Valid @RequestBody DecisionRequest request) {
+        return permisos.decidirComoPastor(id, request.aprobar(), request.comentario());
     }
 
     @PostMapping("/solicitudes/{id}/anular")

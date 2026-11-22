@@ -54,7 +54,8 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         String token = leer(mvc.perform(conToken(post("/api/v1/permisos/solicitudes/" + id + "/enlace-apoderado"), e.preceptor()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("token").asString();
         mvc.perform(post("/api/v1/publico/apoderado/" + token).contentType(MediaType.APPLICATION_JSON).content("{\"aprobar\":true}")).andExpect(status().isOk());
-        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("APROBADO"));
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"));
+        aprobarComoPastor(e.preceptor(), id);
         return id;
     }
 
@@ -67,6 +68,49 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
     private int movimiento(Escenario e, String qr, String tipo) throws Exception {
         return mvc.perform(conToken(post("/api/v1/garita/movimientos"), e.garita()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"qr\":\"" + qr + "\",\"tipo\":\"" + tipo + "\"}")).andReturn().getResponse().getStatus();
+    }
+
+    @Test
+    void garitaPuedeDigitarElCodigoUniversitarioYVeLosPermisosAprobados() throws Exception {
+        var e = escenario();
+        Instant base = base();
+        long permiso = solicitudAprobada(e, base.plus(Duration.ofHours(1)), base.plus(Duration.ofHours(2)));
+        String codigo = leer(mvc.perform(conToken(get("/api/v1/residentes/" + e.residenteId()), e.admin())).andReturn().getResponse().getContentAsString()).get("codigo").asString();
+        fijarLima(lunesAleatorio(), 10, 0);
+        // El código de 9 dígitos equivale a escanear el QR del residente
+        assertEquals(verificar(e, e.qr()), verificar(e, codigo));
+        // Un código que no existe nunca autoriza
+        assertEquals("QR_INVALIDO", verificar(e, "999999999"));
+        // Garita ve los permisos aprobados; el residente no entra a esa lista
+        mvc.perform(conToken(get("/api/v1/garita/permisos"), e.garita())).andExpect(status().isOk()).andExpect(jsonPath("$.contenido").isArray());
+        mvc.perform(conToken(get("/api/v1/garita/permisos"), e.residente())).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void conVariosPermisosGaritaEligeConCualSaleYVuelve() throws Exception {
+        var e = escenario();
+        Instant base = base();
+        var dia = base.atZone(java.time.ZoneId.of("America/Lima")).toLocalDate();
+        long corto = solicitudAprobada(e, base.plus(Duration.ofHours(1)), base.plus(Duration.ofHours(2)));   // 11:00 a 12:00
+        long largo = solicitudAprobada(e, base.plus(Duration.ofHours(5)), base.plus(Duration.ofHours(8)));   // 15:00 a 18:00
+        fijarLima(dia, 11, 30);
+        String cuerpo = "{\"qr\":\"" + e.qr() + "\"}";
+        // Al escanear salen los dos permisos aprobados
+        mvc.perform(conToken(post("/api/v1/garita/permisos-del-residente"), e.garita()).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.permisos.length()").value(2)).andExpect(jsonPath("$.permisos[0].salidaAbierta").value(false));
+        // El largo todavía no está en su horario; el corto sí
+        String conLargo = "{\"qr\":\"" + e.qr() + "\",\"solicitudId\":" + largo + "}";
+        mvc.perform(conToken(post("/api/v1/garita/verificaciones"), e.garita()).contentType(MediaType.APPLICATION_JSON).content(conLargo))
+                .andExpect(jsonPath("$.resultado").value("PERMISO_AUN_NO_VIGENTE"));
+        String conCorto = "{\"qr\":\"" + e.qr() + "\",\"tipo\":\"SALIDA\",\"solicitudId\":" + corto + "}";
+        mvc.perform(conToken(post("/api/v1/garita/movimientos"), e.garita()).contentType(MediaType.APPLICATION_JSON).content(conCorto))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.solicitudId").value(corto));
+        // Ya salió con el corto: figura como salida abierta y lo siguiente es su retorno
+        mvc.perform(conToken(post("/api/v1/garita/permisos-del-residente"), e.garita()).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(jsonPath("$.permisos[0].salidaAbierta").value(true));
+        assertEquals("AUTORIZADO_RETORNO", verificar(e, e.qr()));
+        // Un permiso de otro residente no se puede elegir
+        mvc.perform(conToken(post("/api/v1/garita/permisos-del-residente"), e.residente()).contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isForbidden());
     }
 
     private Instant base() {
@@ -107,8 +151,9 @@ class PermisoGaritaIntegracionTest extends PruebaIntegracion {
         mvc.perform(get("/api/v1/publico/apoderado/" + token)).andExpect(status().isConflict());
         mvc.perform(get("/api/v1/publico/apoderado/token-inventado")).andExpect(status().isNotFound());
 
-        // Con el visto bueno del apoderado queda aprobado y el pastor lo ve en su lista.
-        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("APROBADO"));
+        // Con el visto bueno del apoderado pasa a revisión del pastor; cuando él lo aprueba, aparece en su lista de aprobados.
+        mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.residente())).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"));
+        aprobarComoPastor(e.preceptor(), id);
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes").param("estado", "APROBADO"), e.preceptor())).andExpect(status().isOk());
         mvc.perform(conToken(get("/api/v1/permisos/solicitudes/" + id), e.preceptor())).andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("APROBADO"));
 

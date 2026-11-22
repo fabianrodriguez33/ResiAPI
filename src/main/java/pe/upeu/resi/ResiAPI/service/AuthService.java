@@ -34,14 +34,22 @@ public class AuthService {
     private final TokenService tokens;
     private final LimitadorLogin limitador;
     private final EnviadorCorreo correo;
+    private final pe.upeu.resi.ResiAPI.repository.ResidenteRepository residentes;
     private final SesionActual sesion;
     private final Clock reloj;
+
+    /** Se entra con el usuario (todos los roles) o, los residentes, también con su código universitario. El usuario tiene prioridad. */
+    private pe.upeu.resi.ResiAPI.entity.Usuario resolver(String identificador) {
+        return usuarios.findByUsername(identificador)
+                .or(() -> residentes.findByCodigo(identificador).flatMap(r -> usuarios.findById(r.getUsuarioId())))
+                .orElse(null);
+    }
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
         String nombre = request.username().trim();
         limitador.verificar(nombre);
-        var usuario = usuarios.findByUsername(nombre).orElse(null);
+        var usuario = resolver(nombre);
         boolean coincide = usuario != null && encoder.matches(request.password(), usuario.getPasswordHash());
         boolean provisional = !coincide && usuario != null && coincideProvisional(usuario, request.password());
         if (usuario == null) {
@@ -62,7 +70,7 @@ public class AuthService {
      */
     @Transactional
     public void olvideClave(String identificador) {
-        var usuario = usuarios.findByUsername(identificador.trim()).orElse(null);
+        var usuario = resolver(identificador.trim());
         if (usuario == null || !usuario.isActivo() || !usuario.isEmailVerificado() || usuario.getEmail() == null) {
             return;
         }

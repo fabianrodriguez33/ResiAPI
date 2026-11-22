@@ -14,12 +14,16 @@ public final class ResidenteResponses {
     public record OcupacionResponse(long habitaciones, long capacidadTotal, long ocupados, long disponibles) {
     }
 
+    /** Quién ocupa hoy una cama de la habitación. */
+    public record OcupanteResponse(Long residenteId, String codigo, String nombreCompleto, String cama) {
+    }
+
     public record HabitacionResumen(Long id, String numero, String cama) {
     }
 
     public record ResidenteResponse(Long id, Long usuarioId, String codigo, String nombreCompleto, String telefono, boolean activo,
                                     HabitacionResumen habitacion, boolean puedeSolicitarSolo, String email, String carrera, Integer ciclo,
-                                    String dni, java.time.LocalDate fechaNacimiento, boolean emailVerificado) {
+                                    String dni, java.time.LocalDate fechaNacimiento, boolean emailVerificado, Long fotoEvidenciaId) {
     }
 
     public record ApoderadoResponse(Long id, String nombre, String telefono, String email, String parentesco, boolean principal, String usuario) {

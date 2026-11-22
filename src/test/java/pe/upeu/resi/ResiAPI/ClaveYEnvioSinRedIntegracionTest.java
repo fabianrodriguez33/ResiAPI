@@ -126,6 +126,7 @@ class ClaveYEnvioSinRedIntegracionTest extends PruebaIntegracion {
         long permiso = leer(mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), residente).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tipo\":\"LARGO\",\"motivo\":\"Trabajo\",\"destino\":\"La Era\",\"salida\":\"" + t0.plus(Duration.ofMinutes(10)) + "\",\"retorno\":\"" + t0.plus(Duration.ofHours(4)) + "\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        aprobarComoPastor(pastor, permiso); // la ampliación solo existe sobre un permiso ya aprobado
 
         // La ampliación exige foto; se sube una imagen (PNG mínimo) y se pide volver más tarde.
         byte[] png = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0};

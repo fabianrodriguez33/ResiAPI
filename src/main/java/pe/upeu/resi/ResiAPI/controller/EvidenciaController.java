@@ -25,14 +25,14 @@ public class EvidenciaController {
     private final EvidenciaService evidencias;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('RESIDENTE')")
+    @PreAuthorize("hasAnyRole('RESIDENTE','PRECEPTOR','ADMINISTRADOR','GARITA','APODERADO')")
     @ResponseStatus(HttpStatus.CREATED)
     public EvidenciaResponse subir(@RequestParam("archivo") MultipartFile archivo) {
         return evidencias.subir(archivo);
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('RESIDENTE','PRECEPTOR','ADMINISTRADOR')")
+    @PreAuthorize("hasAnyRole('RESIDENTE','PRECEPTOR','ADMINISTRADOR','GARITA','APODERADO')")
     public ResponseEntity<Resource> descargar(@PathVariable Long id) {
         var c = evidencias.obtener(id);
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(c.contentType()))
