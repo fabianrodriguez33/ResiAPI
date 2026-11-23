@@ -49,8 +49,6 @@ public class GaritaService {
     private final SesionActual sesion;
     private final Clock reloj;
 
-    /** Evaluación sin efectos: indica qué movimiento correspondería y por qué. */
-    @Transactional(readOnly = true)
     /** Garita puede escanear el QR o digitar el código universitario (9 dígitos): el código se convierte en el QR vigente del residente. */
     private String aContenido(String entrada) {
         if (entrada != null && entrada.trim().matches("[0-9]{9}")) {
@@ -89,6 +87,8 @@ public class GaritaService {
         return new pe.upeu.resi.ResiAPI.dto.response.GaritaResponses.PermisosDeResidente(r, lista.isEmpty() ?"El residente no tiene permisos aprobados pendientes" : "Elige el permiso", ev.respuesta().residente(), lista);
     }
 
+    /** Evaluación sin efectos: indica qué movimiento correspondería y por qué. */
+    @Transactional(readOnly = true)
     public VerificacionResponse verificar(String contenidoQr, Long solicitudId) {
         return evaluar(aContenido(contenidoQr), solicitudId).respuesta();
     }

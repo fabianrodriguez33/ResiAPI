@@ -71,6 +71,9 @@ public class EnviadorSmsTwilio implements EnviadorSms {
                 log.error("Twilio rechazó el SMS: HTTP {}", respuesta.statusCode());
             }
         } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.error("No se pudo enviar el SMS", e);
         }
     }
