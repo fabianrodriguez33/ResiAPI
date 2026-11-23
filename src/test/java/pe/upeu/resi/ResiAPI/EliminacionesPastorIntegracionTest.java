@@ -16,14 +16,22 @@ class EliminacionesPastorIntegracionTest extends PruebaIntegracion {
     @Test
     void elPastorEliminaUnCultoSinAsistenciasYPuedeCrearOtro() throws Exception {
         String pastor = tokenDeRol(Rol.PRECEPTOR);
-        var lunes = lunesAleatorio();
-        fijarLima(lunes, 6, 0);
-        long id = leer(mvc.perform(conToken(post("/api/v1/cultos/sesiones"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"tipo\":\"MATUTINO\"}"))
-                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        // La base de pruebas persiste: si ese lunes ya tiene un culto de otra corrida, se prueba con otro.
+        long id = -1;
+        for (int intento = 0; intento < 30 && id < 0; intento++) {
+            fijarLima(lunesAleatorio(), 6, 0);
+            var r = mvc.perform(conToken(post("/api/v1/cultos/sesiones"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"tipo\":\"MATUTINO\"}"))
+                    .andReturn().getResponse();
+            if (r.getStatus() / 100 == 2) id = leer(r.getContentAsString()).get("id").asLong();
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(id > 0, "no se encontró un lunes libre para crear el culto");
         mvc.perform(conToken(delete("/api/v1/cultos/sesiones/" + id), tokenDeRol(Rol.GARITA))).andExpect(status().isForbidden());
         mvc.perform(conToken(delete("/api/v1/cultos/sesiones/" + id), pastor)).andExpect(status().isOk());
         mvc.perform(conToken(get("/api/v1/cultos/sesiones/" + id), pastor)).andExpect(status().isNotFound());
-        mvc.perform(conToken(post("/api/v1/cultos/sesiones"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"tipo\":\"MATUTINO\"}")).andExpect(status().is2xxSuccessful());
+        long otro = leer(mvc.perform(conToken(post("/api/v1/cultos/sesiones"), pastor).contentType(MediaType.APPLICATION_JSON).content("{\"tipo\":\"MATUTINO\"}"))
+                .andExpect(status().is2xxSuccessful()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+        // Limpieza: la base de pruebas persiste y otra corrida con el mismo lunes chocaría con este culto.
+        mvc.perform(conToken(delete("/api/v1/cultos/sesiones/" + otro), pastor)).andExpect(status().isOk());
     }
 
     @Test
