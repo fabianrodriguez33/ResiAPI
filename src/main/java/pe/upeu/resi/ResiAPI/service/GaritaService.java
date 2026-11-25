@@ -49,20 +49,59 @@ public class GaritaService {
     private final SesionActual sesion;
     private final Clock reloj;
 
+    /** Garita puede escanear el QR o digitar el código universitario (9 dígitos): el código se convierte en el QR vigente del residente. */
+    private String aContenido(String entrada) {
+        if (entrada != null && entrada.trim().matches("[0-9]{9}")) {
+            var r = residentes.findByCodigo(entrada.trim()).orElse(null);
+            if (r == null) {
+                return "invalido";
+            }
+            try {
+                return qr.contenidoVigente(r.getId()).contenido();
+            } catch (pe.upeu.resi.ResiAPI.exception.Excepciones.RecursoNoEncontrado e) {
+                return "invalido";
+            }
+        }
+        return entrada;
+    }
+
+    /** Permisos aprobados del residente que todavía no cerraron su ciclo (sin retorno registrado), para que garita elija con cuál salir o volver. */
+    @Transactional(readOnly = true)
+    public pe.upeu.resi.ResiAPI.dto.response.GaritaResponses.PermisosDeResidente permisosDe(String entrada) {
+        var ev = evaluar(aContenido(entrada), null);
+        var r = ev.respuesta().resultado();
+        if (ev.residente() == null || r == Resultado.QR_INVALIDO || r == Resultado.QR_REVOCADO || r == Resultado.RESIDENTE_INACTIVO) {
+            return new pe.upeu.resi.ResiAPI.dto.response.GaritaResponses.PermisosDeResidente(r, ev.respuesta().mensaje(), ev.respuesta().residente(), List.of());
+        }
+        java.util.List<pe.upeu.resi.ResiAPI.dto.response.GaritaResponses.PermisoGarita> lista = solicitudes.findAprobadasNoVencidas(ev.residente().getId(), Instant.EPOCH).stream()
+                .filter(s -> !movimientos.existsBySolicitudIdAndTipoAndAnuladoFalse(s.getId(), TipoMovimiento.RETORNO))
+                .sorted(Comparator.comparing(SolicitudPermiso::getSalidaSolicitada))
+                .map(s -> new pe.upeu.resi.ResiAPI.dto.response.GaritaResponses.PermisoGarita(s.getId(), s.getTipo(), s.getDestino(), s.getMotivo(),
+                        s.getSalidaSolicitada(), s.getRetornoAutorizado(), movimientos.existsBySolicitudIdAndTipoAndAnuladoFalse(s.getId(), TipoMovimiento.SALIDA)))
+                .toList();
+        // Si ya salió, lo único que se puede registrar es el retorno de ese permiso: no se ofrecen los demás.
+        var abierta = lista.stream().filter(pe.upeu.resi.ResiAPI.dto.response.GaritaResponses.PermisoGarita::salidaAbierta).toList();
+        if (!abierta.isEmpty()) {
+            lista = abierta;
+        }
+        return new pe.upeu.resi.ResiAPI.dto.response.GaritaResponses.PermisosDeResidente(r, lista.isEmpty() ?"El residente no tiene permisos aprobados pendientes" : "Elige el permiso", ev.respuesta().residente(), lista);
+    }
+
     /** Evaluación sin efectos: indica qué movimiento correspondería y por qué. */
     @Transactional(readOnly = true)
-    public VerificacionResponse verificar(String contenidoQr) {
-        return evaluar(contenidoQr).respuesta();
+    public VerificacionResponse verificar(String contenidoQr, Long solicitudId) {
+        return evaluar(aContenido(contenidoQr), solicitudId).respuesta();
     }
 
     @Transactional
-    public MovimientoResponse registrar(String contenidoQr, TipoMovimiento tipo) {
+    public MovimientoResponse registrar(String entradaQr, TipoMovimiento tipo, Long solicitudId) {
+        String contenidoQr = aContenido(entradaQr);
         // Se bloquea al residente para serializar escaneos simultáneos del mismo QR (evita dobles salidas).
         var previa = qr.resolver(contenidoQr);
         if (previa.residente() != null) {
             residentes.findByIdForUpdate(previa.residente().getId());
         }
-        var ev = evaluar(contenidoQr);
+        var ev = evaluar(contenidoQr, solicitudId);
         var v = ev.respuesta();
         if (v.movimientoPermitido() == null) {
             throw new Excepciones.Conflicto("No autorizado: " + v.mensaje());
@@ -132,7 +171,7 @@ public class GaritaService {
     private record Evaluacion(VerificacionResponse respuesta, Residente residente) {
     }
 
-    private Evaluacion evaluar(String contenidoQr) {
+    private Evaluacion evaluar(String contenidoQr, Long solicitudElegida) {
         var resolucion = qr.resolver(contenidoQr);
         switch (resolucion.estado()) {
             case INVALIDO -> {
@@ -164,6 +203,22 @@ public class GaritaService {
         List<SolicitudPermiso> aprobados = solicitudes.findAprobadasNoVencidas(residente.getId(), Instant.EPOCH).stream()
                 .filter(s -> !movimientos.existsBySolicitudIdAndTipoAndAnuladoFalse(s.getId(), TipoMovimiento.SALIDA))
                 .sorted(Comparator.comparing(SolicitudPermiso::getSalidaSolicitada)).toList();
+        if (solicitudElegida != null) {
+            // Garita eligió con cuál permiso sale el residente (puede tener varios el mismo día).
+            var elegido = aprobados.stream().filter(s -> s.getId().equals(solicitudElegida)).findFirst();
+            if (elegido.isEmpty()) {
+                return negado(Resultado.SIN_PERMISO, "Ese permiso no está disponible para salir", residente);
+            }
+            var s = elegido.get();
+            if (s.getSalidaSolicitada().isAfter(ahora)) {
+                return negado(Resultado.PERMISO_AUN_NO_VIGENTE, "El permiso aprobado todavía no está en su horario de salida", residente);
+            }
+            if (s.getRetornoAutorizado().isBefore(ahora)) {
+                return negado(Resultado.PERMISO_VENCIDO, "El permiso aprobado ya venció", residente);
+            }
+            return new Evaluacion(new VerificacionResponse(Resultado.AUTORIZADO_SALIDA, "Permiso vigente hasta el retorno autorizado", datos(residente),
+                    TipoMovimiento.SALIDA, s.getId(), s.getRetornoAutorizado(), null), residente);
+        }
         var vigente = aprobados.stream()
                 .filter(s -> !s.getSalidaSolicitada().isAfter(ahora) && !s.getRetornoAutorizado().isBefore(ahora)).findFirst();
         if (vigente.isPresent()) {

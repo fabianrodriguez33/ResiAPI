@@ -27,6 +27,7 @@ import pe.upeu.resi.ResiAPI.service.UsuarioService;
 public class UsuarioController {
 
     private final UsuarioService usuarios;
+    private final pe.upeu.resi.ResiAPI.service.PerfilService perfil;
 
     @GetMapping
     public PaginaResponse<UsuarioResponse> listar(@RequestParam(defaultValue = "0") int pagina, @RequestParam(defaultValue = "20") int tamanio) {
@@ -37,6 +38,13 @@ public class UsuarioController {
     @ResponseStatus(HttpStatus.CREATED)
     public UsuarioResponse crear(@Valid @RequestBody UsuarioRequest request) {
         return usuarios.crearPersonal(request);
+    }
+
+    /** El administrador verifica el correo de una cuenta sin pedir el código. */
+    @PostMapping("/{id}/verificar-correo")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void verificarCorreo(@PathVariable Long id) {
+        perfil.verificarPorAdministrador(id);
     }
 
     @PatchMapping("/{id}")

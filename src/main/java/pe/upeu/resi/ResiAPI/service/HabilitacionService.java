@@ -106,6 +106,55 @@ public class HabilitacionService {
         return new Estado(motivo == null, domingo, domingo.plusDays(6), motivo, noJustificadas, n, promedio, LIMPIEZA_MINIMA, faltas);
     }
 
+    /**
+     * Días de cultos de un residente entre [desde, hasta] para la nota mensual: de lunes a viernes, con culto realizado (sesión abierta por
+     * el pastor), no marcados como día sin culto y desde que el residente existe en el sistema. {@code programados} son esos días;
+     * {@code asistidos}, aquellos a los que asistió a algún culto; {@code justificadas}, los que faltó pero el pastor justificó
+     * (no cuentan ni como asistidos ni como faltas).
+     */
+    public record DiasCulto(long programados, long asistidos, long justificadas) {
+        /** Días sobre los que se calcula el porcentaje: los programados menos los justificados. */
+        public long base() {
+            return programados - justificadas;
+        }
+    }
+
+    /** Fechas de [desde, hasta] con culto realizado (sesión abierta) que no están marcadas como día sin culto. */
+    @Transactional(readOnly = true)
+    public Set<LocalDate> fechasConCulto(LocalDate desde, LocalDate hasta) {
+        Set<LocalDate> conCulto = new HashSet<>(sesiones.fechasConSesion(desde, hasta));
+        diasSinCulto.findByFechaBetweenOrderByFechaAsc(desde, hasta).forEach(d -> conCulto.remove(d.getFecha()));
+        return conCulto;
+    }
+
+    @Transactional(readOnly = true)
+    public DiasCulto diasDeCultos(Residente r, LocalDate desde, LocalDate hasta) {
+        return diasDeCultos(r, desde, hasta, fechasConCulto(desde, hasta));
+    }
+
+    /** Igual que {@link #diasDeCultos(Residente, LocalDate, LocalDate)} con las fechas con culto ya calculadas (para recorrer a todos los residentes). */
+    @Transactional(readOnly = true)
+    public DiasCulto diasDeCultos(Residente r, LocalDate desde, LocalDate hasta, Set<LocalDate> conCulto) {
+        Set<LocalDate> asistidas = new HashSet<>(asistencias.fechasAsistidas(r.getId(), desde, hasta));
+        Set<LocalDate> justificadas = new HashSet<>();
+        justificaciones.findByResidenteIdAndFechaBetween(r.getId(), desde, hasta).forEach(j -> justificadas.add(j.getFecha()));
+        LocalDate alta = r.getCreadoEn() == null ? desde : r.getCreadoEn().atZone(zona).toLocalDate();
+        long programados = 0, asistidosN = 0, justificadasN = 0;
+        for (LocalDate d = desde; !d.isAfter(hasta); d = d.plusDays(1)) {
+            boolean laborable = d.getDayOfWeek() != DayOfWeek.SATURDAY && d.getDayOfWeek() != DayOfWeek.SUNDAY;
+            if (!laborable || !conCulto.contains(d) || d.isBefore(alta)) {
+                continue;
+            }
+            programados++;
+            if (asistidas.contains(d)) {
+                asistidosN++;
+            } else if (justificadas.contains(d)) {
+                justificadasN++;
+            }
+        }
+        return new DiasCulto(programados, asistidosN, justificadasN);
+    }
+
     /** Días de lunes a viernes de [desde, hasta] con culto realizado en los que el residente no asistió, marcando los justificados. */
     List<Falta> faltasEntre(Residente r, LocalDate desde, LocalDate hasta) {
         Set<LocalDate> conCulto = new HashSet<>(sesiones.fechasConSesion(desde, hasta));

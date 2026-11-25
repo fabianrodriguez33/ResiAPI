@@ -97,6 +97,88 @@ public class LimpiezaService {
         return aResponse(e, new EnumMap<>(puntajes));
     }
 
+    /** Lo que se evaluó en una habitación un día: basura y olores comunes y los cuatro criterios personales de cada residente. */
+    public record EvaluacionHabitacionDetalle(LocalDate fecha, int basura, int olores, List<PersonaEvaluada> residentes) {
+    }
+
+    public record PersonaEvaluada(Long residenteId, String nombre, int ropero, int cama, int escritorio, int piso) {
+    }
+
+    @Transactional(readOnly = true)
+    public EvaluacionHabitacionDetalle detalleDeHabitacion(Long habitacionId, LocalDate fecha) {
+        var lista = evaluaciones.findByHabitacionIdAndFecha(habitacionId, fecha);
+        if (lista.isEmpty()) {
+            throw new Excepciones.RecursoNoEncontrado("Esa habitación no tiene evaluación en esa fecha");
+        }
+        var porEval = new java.util.HashMap<Long, Map<String, Integer>>();
+        detalles.findByEvaluacionIdIn(lista.stream().map(e -> e.getId()).toList()).forEach(d ->
+                porEval.computeIfAbsent(d.getEvaluacionId(), k -> new java.util.HashMap<>()).put(d.getCriterio().name(), (int) d.getPuntaje()));
+        int basura = 0, olores = 0;
+        var personas = new java.util.ArrayList<PersonaEvaluada>();
+        for (var e : lista) {
+            var m = porEval.getOrDefault(e.getId(), Map.of());
+            basura = m.getOrDefault("BASURA", 0);
+            olores = m.getOrDefault("OLORES", 0);
+            var res = residentes.findById(e.getResidenteId()).orElseThrow();
+            String nombre = usuarios.findById(res.getUsuarioId()).map(u -> u.getNombreCompleto()).orElse("-");
+            personas.add(new PersonaEvaluada(e.getResidenteId(), nombre, m.getOrDefault("ROPERO", 0), m.getOrDefault("CAMA", 0), m.getOrDefault("ESCRITORIO", 0), m.getOrDefault("PISO", 0)));
+        }
+        return new EvaluacionHabitacionDetalle(fecha, basura, olores, personas);
+    }
+
+    /** Modifica la evaluación de una habitación: reemplaza los puntajes de ese día en un solo paso y anota lo que había antes. */
+    @Transactional
+    public List<EvaluacionResponse> reemplazarHabitacion(Long habitacionId, LimpiezaHabitacionRequest r) {
+        var antes = evaluaciones.findByHabitacionIdAndFecha(habitacionId, r.fecha());
+        if (antes.isEmpty()) {
+            throw new Excepciones.RecursoNoEncontrado("Esa habitación no tiene evaluación en esa fecha");
+        }
+        var resumen = antes.stream().map(e -> "residente=" + e.getResidenteId() + " total=" + e.getTotal()).collect(java.util.stream.Collectors.joining("; "));
+        detalles.deleteByEvaluacionIdIn(antes.stream().map(e -> e.getId()).toList());
+        evaluaciones.deleteAll(antes);
+        evaluaciones.flush();
+        var nuevas = registrarHabitacion(habitacionId, r);
+        auditoria.registrar(sesion.obtener().id(), "LIMPIEZA_MODIFICADA", "habitacion", habitacionId, r.fecha() + " | antes: " + resumen);
+        return nuevas;
+    }
+
+    /** Elimina toda la evaluación de limpieza de un día (todas las habitaciones), con motivo y constancia. */
+    @Transactional
+    public int eliminarDelDia(LocalDate fecha, String motivo) {
+        if (motivo == null || motivo.isBlank()) {
+            throw new Excepciones.SolicitudInvalida("Datos inválidos", Map.of("motivo", "El motivo es obligatorio"));
+        }
+        var lista = evaluaciones.findByFecha(fecha);
+        if (lista.isEmpty()) {
+            throw new Excepciones.RecursoNoEncontrado("No hay evaluaciones de limpieza en esa fecha");
+        }
+        detalles.deleteByEvaluacionIdIn(lista.stream().map(e -> e.getId()).toList());
+        evaluaciones.deleteAll(lista);
+        auditoria.registrar(sesion.obtener().id(), "LIMPIEZA_DEL_DIA_ELIMINADA", "evaluacion_limpieza", null, fecha + " | " + motivo.trim() + " | evaluaciones=" + lista.size());
+        return lista.size();
+    }
+
+    /**
+     * El pastor elimina la evaluación de una habitación en una fecha (con motivo) para volver a evaluarla. Los puntajes y quién la hizo quedan
+     * en la auditoría; las notas y el ranking se recalculan solos porque salen de las evaluaciones.
+     */
+    @Transactional
+    public int eliminarDeHabitacion(Long habitacionId, java.time.LocalDate fecha, String motivo) {
+        if (motivo == null || motivo.isBlank()) {
+            throw new Excepciones.SolicitudInvalida("Datos inválidos", java.util.Map.of("motivo", "El motivo es obligatorio"));
+        }
+        var lista = evaluaciones.findByHabitacionIdAndFecha(habitacionId, fecha);
+        if (lista.isEmpty()) {
+            throw new Excepciones.RecursoNoEncontrado("Esa habitación no tiene evaluación en esa fecha");
+        }
+        var ids = lista.stream().map(e -> e.getId()).toList();
+        var resumen = lista.stream().map(e -> "residente=" + e.getResidenteId() + " total=" + e.getTotal()).collect(java.util.stream.Collectors.joining("; "));
+        detalles.deleteByEvaluacionIdIn(ids);
+        evaluaciones.deleteAll(lista);
+        auditoria.registrar(sesion.obtener().id(), "LIMPIEZA_ELIMINADA", "habitacion", habitacionId, fecha + " | " + motivo.trim() + " | " + resumen);
+        return lista.size();
+    }
+
     /** Habitaciones con ocupantes y el estado de evaluación de cada uno en [fecha] (hoy por omisión). */
     @Transactional(readOnly = true)
     public List<HabitacionLimpiezaResponse> habitaciones(LocalDate fecha) {

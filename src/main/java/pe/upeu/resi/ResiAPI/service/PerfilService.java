@@ -33,6 +33,7 @@ public class PerfilService {
 
     private final UsuarioRepository usuarios;
     private final VerificacionCorreoRepository verificaciones;
+    private final EvidenciaService evidencias;
     private final EnviadorCorreo correo;
     private final AuditoriaService auditoria;
     private final SesionActual sesion;
@@ -52,6 +53,16 @@ public class PerfilService {
         return aResponse(u);
     }
 
+    /** Cambia la foto de perfil por una imagen que la propia persona ya subió como evidencia. */
+    @Transactional
+    public PerfilResponse cambiarFoto(Long evidenciaId) {
+        var u = usuario(sesion.obtener().id());
+        evidencias.exigirPropia(evidenciaId, u.getId());
+        u.setFotoEvidenciaId(evidenciaId);
+        auditoria.registrar(u.getId(), "FOTO_PERFIL_CAMBIADA", "usuario", u.getId(), null);
+        return aResponse(u);
+    }
+
     /** Aplica los cambios de contacto. Si el correo cambia, deja de estar verificado y se descarta el código pendiente. */
     @Transactional
     public void actualizarContacto(Usuario u, String email, String telefono, LocalDate nacimiento) {
@@ -65,7 +76,11 @@ public class PerfilService {
             }
         }
         if (telefono != null) {
-            u.setTelefono(telefono.isBlank() ? null : telefono.trim());
+            String nuevo = telefono.isBlank() ? null : telefono.trim();
+            if (nuevo != null && usuarios.existsByTelefonoAndIdNot(nuevo, u.getId())) {
+                throw new Excepciones.Conflicto("Ese celular ya está registrado en otra cuenta");
+            }
+            u.setTelefono(nuevo);
         }
         if (nacimiento != null) {
             validarNacimiento(nacimiento);
@@ -137,6 +152,24 @@ public class PerfilService {
         return aResponse(u);
     }
 
+    /** El administrador da por verificado el correo de una cuenta (por ejemplo, cuando no llega el código). Queda auditado. */
+    @Transactional
+    public void verificarPorAdministrador(Long usuarioId) {
+        var u = usuario(usuarioId);
+        if (u.getEmail() == null) {
+            throw new Excepciones.Conflicto("Esa cuenta no tiene correo guardado");
+        }
+        if (u.isEmailVerificado()) {
+            return;
+        }
+        if (usuarios.existsByEmailIgnoreCaseAndEmailVerificadoTrueAndIdNot(u.getEmail(), u.getId())) {
+            throw new Excepciones.Conflicto("Ese correo ya está verificado en otra cuenta");
+        }
+        u.setEmailVerificado(true);
+        verificaciones.findById(u.getId()).ifPresent(verificaciones::delete);
+        auditoria.registrar(sesion.obtener().id(), "CORREO_VERIFICADO_POR_ADMIN", "usuario", u.getId(), null);
+    }
+
     private Usuario usuario(Long id) {
         return usuarios.findById(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Usuario no encontrado"));
     }
@@ -151,6 +184,6 @@ public class PerfilService {
 
     public static PerfilResponse aResponse(Usuario u) {
         return new PerfilResponse(u.getId(), u.getUsername(), u.getNombreCompleto(), u.getRol(), u.getDni(), u.getFechaNacimiento(),
-                u.getEmail(), u.isEmailVerificado(), u.getTelefono());
+                u.getEmail(), u.isEmailVerificado(), u.getTelefono(), u.getFotoEvidenciaId());
     }
 }

@@ -27,29 +27,46 @@ import pe.upeu.resi.ResiAPI.service.GaritaService;
 @RequiredArgsConstructor
 public class GaritaController {
 
-    public record VerificarRequest(@NotBlank(message = "El QR es obligatorio") @Size(max = 120) String qr) {
+    public record VerificarRequest(@NotBlank(message = "El QR es obligatorio") @Size(max = 120) String qr, Long solicitudId) {
     }
 
     public record MovimientoRequest(@NotBlank(message = "El QR es obligatorio") @Size(max = 120) String qr,
-                                    @NotNull(message = "El tipo de movimiento es obligatorio") TipoMovimiento tipo) {
+                                    @NotNull(message = "El tipo de movimiento es obligatorio") TipoMovimiento tipo, Long solicitudId) {
     }
 
     public record AnularMovimientoRequest(@NotBlank(message = "El motivo es obligatorio") @Size(max = 300) String motivo) {
     }
 
     private final GaritaService garita;
+    private final pe.upeu.resi.ResiAPI.service.PermisoService permisos;
 
     @PostMapping("/garita/verificaciones")
     @PreAuthorize("hasAnyRole('GARITA','PRECEPTOR','ADMINISTRADOR')")
     public VerificacionResponse verificar(@Valid @RequestBody VerificarRequest request) {
-        return garita.verificar(request.qr());
+        return garita.verificar(request.qr(), request.solicitudId());
+    }
+
+    /** Al escanear el QR o digitar el código: los permisos aprobados del residente, para elegir con cuál sale o vuelve. */
+    @PostMapping("/garita/permisos-del-residente")
+    @PreAuthorize("hasRole('GARITA')")
+    public pe.upeu.resi.ResiAPI.dto.response.GaritaResponses.PermisosDeResidente permisosDelResidente(@Valid @RequestBody VerificarRequest request) {
+        return garita.permisosDe(request.qr());
     }
 
     @PostMapping("/garita/movimientos")
     @PreAuthorize("hasRole('GARITA')")
     @ResponseStatus(HttpStatus.CREATED)
     public MovimientoResponse registrar(@Valid @RequestBody MovimientoRequest request) {
-        return garita.registrar(request.qr(), request.tipo());
+        return garita.registrar(request.qr(), request.tipo(), request.solicitudId());
+    }
+
+    /** Permisos aprobados, para que garita vea quién puede salir o ya salió. */
+    @GetMapping("/garita/permisos")
+    @PreAuthorize("hasRole('GARITA')")
+    public pe.upeu.resi.ResiAPI.dto.response.PaginaResponse<pe.upeu.resi.ResiAPI.dto.response.PermisoResponses.SolicitudResponse> permisosAprobados(
+            @RequestParam(defaultValue = "0") int pagina, @RequestParam(defaultValue = "20") int tamanio) {
+        return permisos.listar(pe.upeu.resi.ResiAPI.enums.EstadoSolicitud.APROBADO,
+                org.springframework.data.domain.PageRequest.of(Math.max(pagina, 0), Math.min(Math.max(tamanio, 1), 100)));
     }
 
     @GetMapping("/garita/movimientos")

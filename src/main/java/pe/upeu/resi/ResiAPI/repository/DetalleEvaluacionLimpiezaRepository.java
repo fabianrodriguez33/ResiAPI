@@ -8,4 +8,6 @@ import pe.upeu.resi.ResiAPI.entity.DetalleEvaluacionLimpieza;
 public interface DetalleEvaluacionLimpiezaRepository extends JpaRepository<DetalleEvaluacionLimpieza, Long> {
 
     List<DetalleEvaluacionLimpieza> findByEvaluacionIdIn(Collection<Long> ids);
+
+    void deleteByEvaluacionIdIn(Collection<Long> ids);
 }

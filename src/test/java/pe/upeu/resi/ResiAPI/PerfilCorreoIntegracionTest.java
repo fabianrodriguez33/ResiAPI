@@ -39,8 +39,9 @@ class PerfilCorreoIntegracionTest extends PruebaIntegracion {
                 .andExpect(jsonPath("$.emailVerificado").value(false)).andExpect(jsonPath("$.dni").doesNotExist());
         assertEquals(409, pedirCodigo(token), "sin correo guardado no hay a dónde enviarlo");
 
-        guardar(token, "{\"email\":\"" + correo + "\",\"telefono\":\"987654321\",\"fechaNacimiento\":\"1985-09-12\"}");
-        mvc.perform(conToken(get("/api/v1/perfil"), token)).andExpect(jsonPath("$.email").value(correo)).andExpect(jsonPath("$.telefono").value("987654321"))
+        String celular = celularUnico();
+        guardar(token, "{\"email\":\"" + correo + "\",\"telefono\":\"" + celular + "\",\"fechaNacimiento\":\"1985-09-12\"}");
+        mvc.perform(conToken(get("/api/v1/perfil"), token)).andExpect(jsonPath("$.email").value(correo)).andExpect(jsonPath("$.telefono").value(celular))
                 .andExpect(jsonPath("$.fechaNacimiento").value("1985-09-12")).andExpect(jsonPath("$.emailVerificado").value(false));
 
         assertEquals(204, pedirCodigo(token));

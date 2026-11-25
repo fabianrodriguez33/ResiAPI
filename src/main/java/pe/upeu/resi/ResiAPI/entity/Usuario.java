@@ -40,6 +40,9 @@ public class Usuario {
     @Column(name = "email")
     private String email;
 
+    @Column(name = "foto_evidencia_id")
+    private Long fotoEvidenciaId;
+
     @Column(name = "email_verificado")
     private boolean emailVerificado;
 

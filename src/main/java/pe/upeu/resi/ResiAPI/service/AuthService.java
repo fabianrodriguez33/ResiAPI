@@ -21,8 +21,8 @@ import pe.upeu.resi.ResiAPI.security.TokenService;
 @RequiredArgsConstructor
 public class AuthService {
 
-    /** Hash válido de una clave inexistente: iguala el tiempo de respuesta cuando el usuario no existe. */
-    private static final String HASH_FICTICIO = "$2a$10$7EqJtq98hPqEX7fNZaFWoOhi5BUXpMQRvF.W8TQLMlYwI1rQjUBe2";
+    /** Hash de una clave aleatoria que nadie conoce, generado al arrancar: iguala el tiempo de respuesta cuando el usuario no existe. */
+    private final String hashFicticio = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode(java.util.UUID.randomUUID().toString());
     private static final Duration VIGENCIA_PROVISIONAL = Duration.ofMinutes(30);
     private static final Duration ESPERA_ENTRE_ENVIOS = Duration.ofMinutes(1);
     /** Sin letras ni números que se confundan (0/O, 1/l/I). */
@@ -34,18 +34,26 @@ public class AuthService {
     private final TokenService tokens;
     private final LimitadorLogin limitador;
     private final EnviadorCorreo correo;
+    private final pe.upeu.resi.ResiAPI.repository.ResidenteRepository residentes;
     private final SesionActual sesion;
     private final Clock reloj;
+
+    /** Se entra con el usuario (todos los roles) o, los residentes, también con su código universitario. El usuario tiene prioridad. */
+    private pe.upeu.resi.ResiAPI.entity.Usuario resolver(String identificador) {
+        return usuarios.findByUsername(identificador)
+                .or(() -> residentes.findByCodigo(identificador).flatMap(r -> usuarios.findById(r.getUsuarioId())))
+                .orElse(null);
+    }
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
         String nombre = request.username().trim();
         limitador.verificar(nombre);
-        var usuario = usuarios.findByUsername(nombre).orElse(null);
+        var usuario = resolver(nombre);
         boolean coincide = usuario != null && encoder.matches(request.password(), usuario.getPasswordHash());
         boolean provisional = !coincide && usuario != null && coincideProvisional(usuario, request.password());
         if (usuario == null) {
-            encoder.matches(request.password(), HASH_FICTICIO); // iguala el tiempo de respuesta
+            encoder.matches(request.password(), hashFicticio); // iguala el tiempo de respuesta
         }
         if (usuario == null || !(coincide || provisional) || !usuario.isActivo()) {
             limitador.registrarFallo(nombre);
@@ -62,7 +70,7 @@ public class AuthService {
      */
     @Transactional
     public void olvideClave(String identificador) {
-        var usuario = usuarios.findByUsername(identificador.trim()).orElse(null);
+        var usuario = resolver(identificador.trim());
         if (usuario == null || !usuario.isActivo() || !usuario.isEmailVerificado() || usuario.getEmail() == null) {
             return;
         }

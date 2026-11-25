@@ -63,6 +63,9 @@ public class EnviadorPushFcm implements EnviadorPush {
                 log.error("FCM rechazó el push: HTTP {}", respuesta.statusCode());
             }
         } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.error("No se pudo enviar el push", e);
         }
         return true;

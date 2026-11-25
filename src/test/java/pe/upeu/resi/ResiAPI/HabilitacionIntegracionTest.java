@@ -165,8 +165,9 @@ class HabilitacionIntegracionTest extends PruebaIntegracion {
                         .content(body("LARGO", salida, salida.plus(Duration.ofHours(4))))).andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("PENDIENTE_APODERADO"))
                         .andReturn().getResponse().getContentAsString()).get("id").asLong();
                 solicitudB = leer(mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), residenteB).contentType(MediaType.APPLICATION_JSON)
-                        .content(body("LARGO", salida, salida.plus(Duration.ofHours(4))))).andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("APROBADO"))
+                        .content(body("LARGO", salida, salida.plus(Duration.ofHours(4))))).andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR"))
                         .andReturn().getResponse().getContentAsString()).get("id").asLong();
+                aprobarComoPastor(pastor, solicitudB);
             }
         }
 

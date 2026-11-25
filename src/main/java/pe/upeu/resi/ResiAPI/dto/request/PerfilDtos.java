@@ -14,11 +14,14 @@ public final class PerfilDtos {
     }
 
     public record ContactoRequest(
-            @Email(message = "Correo inválido") @Size(max = 150) String email,
-            @Size(max = 20) String telefono,
+            @jakarta.validation.constraints.Pattern(regexp = "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Email(message = "Correo inválido") @Size(max = 150) String email,
+            @jakarta.validation.constraints.Pattern(regexp = "^(9\\d{8})?$", message = "El celular debe tener 9 dígitos y empezar en 9") @Size(max = 20) String telefono,
             @Past(message = "La fecha de nacimiento debe ser anterior a hoy") LocalDate fechaNacimiento) {
     }
 
     public record CodigoCorreoRequest(@NotBlank(message = "Escribe el código") @Pattern(regexp = "\\d{6}", message = "El código tiene 6 dígitos") String codigo) {
+    }
+
+    public record FotoRequest(@jakarta.validation.constraints.NotNull(message = "Indique la foto") Long evidenciaId) {
     }
 }

@@ -32,8 +32,10 @@ class AnulacionYCalendarioIntegracionTest extends PruebaIntegracion {
     private long permisoAprobado(Escenario e, Instant salida) throws Exception {
         var res = mvc.perform(conToken(post("/api/v1/permisos/solicitudes"), e.residente()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"tipo\":\"LARGO\",\"motivo\":\"Visita\",\"destino\":\"Casa\",\"salida\":\"" + salida + "\",\"retorno\":\"" + salida.plus(Duration.ofHours(4)) + "\"}"))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("APROBADO")).andReturn().getResponse();
-        return leer(res.getContentAsString()).get("id").asLong();
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("PENDIENTE_PRECEPTOR")).andReturn().getResponse();
+        long id = leer(res.getContentAsString()).get("id").asLong();
+        aprobarComoPastor(e.pastor(), id);
+        return id;
     }
 
     private String verificacion(Escenario e) throws Exception {

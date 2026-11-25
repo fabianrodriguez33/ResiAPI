@@ -1,0 +1,56 @@
+# Despliegue en un servidor con HTTPS: base de datos + API + proxy Caddy (único punto expuesto a internet).
+#   docker compose -f docker-compose.prod.yml up -d --build      (necesita .env con SITE_HOST; ver docs/despliegue.md)
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-resiup}
+      POSTGRES_USER: ${DB_USER:-resiup}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
+      TZ: America/Lima
+    # Sin «ports»: la base solo es accesible desde la red interna de Docker.
+    volumes:
+      - resiup-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-resiup} -d ${DB_NAME:-resiup}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      EVIDENCIAS_DIR: /app/evidencias
+      JAVA_TOOL_OPTIONS: -Xmx768m
+    # Sin «ports»: solo Caddy habla con la API.
+    volumes:
+      - resiup-evidencias:/app/evidencias
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      SITE_HOST: ${SITE_HOST:?Defina SITE_HOST en .env (nombre público del servidor)}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-datos:/data
+      - caddy-config:/config
+
+volumes:
+  resiup-pgdata:
+  resiup-evidencias:
+  caddy-datos:
+  caddy-config:

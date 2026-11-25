@@ -15,6 +15,8 @@ public interface MovimientoGaritaRepository extends JpaRepository<MovimientoGari
 
     Optional<MovimientoGarita> findFirstByResidenteIdAndAnuladoFalseOrderByRegistradoEnDescIdDesc(Long residenteId);
 
+    Optional<MovimientoGarita> findFirstBySolicitudIdAndTipoAndAnuladoFalseOrderByRegistradoEnAsc(Long solicitudId, TipoMovimiento tipo);
+
     boolean existsBySolicitudIdAndTipoAndAnuladoFalse(Long solicitudId, TipoMovimiento tipo);
 
     Page<MovimientoGarita> findAllByOrderByRegistradoEnDesc(Pageable pageable);
