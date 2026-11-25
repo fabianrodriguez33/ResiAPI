@@ -44,6 +44,22 @@ services:
         sync: false
       - key: ADMIN_CLAVE
         sync: false
+      # Correo de verificación y avisos. Sin SPRING_MAIL_HOST el servidor solo escribe los códigos en el registro.
+      # Los valores reales (host, usuario, clave, remitente) se ponen en el panel de Render, no aquí.
+      - key: SPRING_MAIL_HOST
+        sync: false
+      - key: SPRING_MAIL_PORT
+        value: "587"
+      - key: SPRING_MAIL_USERNAME
+        sync: false
+      - key: SPRING_MAIL_PASSWORD
+        sync: false
+      - key: CORREO_DESDE
+        sync: false
+      # Lista de destinos permitidos, separados por coma. Vacía = se envía a cualquiera.
+      # Por defecto la app solo escribe a una cuenta de prueba; el equipo decide el valor antes de abrir el envío.
+      - key: CORREO_PERMITIDOS
+        sync: false
 
 databases:
   - name: resiup-db
