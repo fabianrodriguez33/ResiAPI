@@ -218,6 +218,7 @@ async function cargarUsuarios() {
   tabla($('#tUsuarios'), ['Usuario', 'Nombre', 'Rol', 'Activo', ''], p.contenido.map(u => [u.username, u.nombreCompleto, rol[u.rol] || u.rol, u.activo ? 'Sí' : 'No',
     h('span', {},
       h('button', { class: 'sec', onclick: () => accion(async () => { await enviar('/usuarios/' + u.id, 'PATCH', { activo: !u.activo }); cargarUsuarios(); }, 'Guardado') }, u.activo ? 'Desactivar' : 'Activar'), ' ',
+      h('button', { class: 'sec', onclick: () => accion(() => enviar('/usuarios/' + u.id + '/verificar-correo', 'POST'), 'Correo verificado') }, 'Verificar correo'), ' ',
       h('button', { class: 'sec', onclick: () => { const c = prompt('Nueva contraseña para ' + u.username + ' (mín. 8):'); if (c) accion(() => enviar('/usuarios/' + u.id, 'PATCH', { password: c }), 'Contraseña cambiada'); } }, 'Cambiar clave'))]));
 }
 $('#fUsuario').onsubmit = e => { e.preventDefault(); accion(async () => { await enviar('/usuarios', 'POST', datos(e.target)); e.target.reset(); cargarUsuarios(); }, 'Usuario creado'); };
