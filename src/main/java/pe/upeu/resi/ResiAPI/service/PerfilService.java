@@ -152,6 +152,24 @@ public class PerfilService {
         return aResponse(u);
     }
 
+    /** El administrador da por verificado el correo de una cuenta (por ejemplo, cuando no llega el código). Queda auditado. */
+    @Transactional
+    public void verificarPorAdministrador(Long usuarioId) {
+        var u = usuario(usuarioId);
+        if (u.getEmail() == null) {
+            throw new Excepciones.Conflicto("Esa cuenta no tiene correo guardado");
+        }
+        if (u.isEmailVerificado()) {
+            return;
+        }
+        if (usuarios.existsByEmailIgnoreCaseAndEmailVerificadoTrueAndIdNot(u.getEmail(), u.getId())) {
+            throw new Excepciones.Conflicto("Ese correo ya está verificado en otra cuenta");
+        }
+        u.setEmailVerificado(true);
+        verificaciones.findById(u.getId()).ifPresent(verificaciones::delete);
+        auditoria.registrar(sesion.obtener().id(), "CORREO_VERIFICADO_POR_ADMIN", "usuario", u.getId(), null);
+    }
+
     private Usuario usuario(Long id) {
         return usuarios.findById(id).orElseThrow(() -> new Excepciones.RecursoNoEncontrado("Usuario no encontrado"));
     }
