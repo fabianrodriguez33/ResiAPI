@@ -12,7 +12,7 @@ import * as apoderado from './pages/apoderado'
 import * as pastor from './pages/pastor'
 import * as garita from './pages/garita'
 import * as admin from './pages/admin'
-import logo from './assets/logo.png'
+import logo from './assets/logo-letras.png'
 import './styles.css'
 
 // Menú de cada rol: [ruta, título, componente, icono]. El servidor vuelve a validar el rol en cada petición.
@@ -62,7 +62,7 @@ function Panel({ sesion, salir }) {
   return (
     <div className="panel">
       <nav className="lateral" aria-label="Principal">
-        <div className="marca"><img src={logo} alt="" /><span>ResiUP</span></div>
+        <div className="marca"><img src={logo} alt="ResiUP" /></div>
         <ul>
           {menu.map(([r, titulo, , Icono]) => (
             <li key={r}>

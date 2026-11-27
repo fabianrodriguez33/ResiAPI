@@ -57,7 +57,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--vivo); }
 /* ---------- inicio de sesión ---------- */
 .portada { min-height: 100vh; display: grid; grid-template-columns: minmax(340px, 440px) 1fr; background: #fff; }
 .portada-panel { background: #012e6a; color: #fff; padding: 56px 44px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
-.portada-panel h1 { color: #fff; font-size: 3rem; font-weight: 700; }
+.portada-panel h1 { margin: 0 0 4px; }
 .portada-panel p { margin: 0 0 12px; color: #c9d5ea; }
 .portada-panel input { background: #fff; color: #111827; }
 .portada-panel .boton-principal { background: #fff; color: #012e6a; }
@@ -65,7 +65,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--vivo); }
 .portada-panel .boton-enlace { color: #c9d5ea; align-self: flex-start; }
 .portada-panel .error { color: #ffb4ab; }
 .portada-panel .nota { color: #111827; }
-.portada-logo { width: 110px; margin-left: -8px; }
+.portada-logo { display: block; width: min(260px, 100%); }
 .portada-foto { width: 100%; height: 100vh; object-fit: cover; object-position: 70% center; }
 .centro { max-width: 380px; margin: 12vh auto; padding: 0 16px; display: grid; gap: 12px; }
 
@@ -73,7 +73,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--vivo); }
 .panel { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
 .lateral { background: #012e6a; color: #fff; padding: 20px 14px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .marca { display: flex; align-items: center; gap: 10px; color: #fff; font-size: 1.25rem; font-weight: 700; }
-.marca img { width: 44px; }
+.marca img { display: block; width: 150px; margin: 2px 4px; }
 .lateral ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .lateral a { display: flex; align-items: center; gap: 10px; color: #c9d5ea; text-decoration: none; padding: 9px 12px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
 .lateral a:hover { background: rgb(255 255 255 / .08); color: #fff; }
@@ -166,8 +166,9 @@ dialog { border: 0; border-radius: 14px; padding: 22px; width: min(560px, calc(1
 dialog::backdrop { background: rgb(1 20 48 / .55); }
 dialog > * + * { margin-top: 14px; }
 
-.qr { background: #fff; border-radius: 10px; width: min(240px, 100%); padding: 6px; }
-.qr svg { display: block; width: 100%; height: auto; }
+/* QR de la casa: tarjeta blanca sobre el azul, con el icono al centro. */
+.qr { background: #012e68; border-radius: 16px; width: min(280px, 100%); padding: 16px; }
+.qr svg { display: block; width: 100%; height: auto; background: #fff; border-radius: 12px; }
 .camara { display: block; width: min(420px, 100%); margin-top: 10px; border-radius: 10px; background: #000; }
 .evidencia { max-height: 60vh; border-radius: 8px; }
 .lista-avisos { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

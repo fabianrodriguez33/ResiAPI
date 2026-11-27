@@ -1,4 +1,5 @@
 import qrcode from 'qrcode-generator'
+import iconoQr from '../assets/icono-qr.png'
 import { ArrowLeft, CalendarClock, History, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { api, pagina } from '../api'
@@ -7,11 +8,29 @@ import { masNuevoPrimero, permisoVigente, permisosPrincipales, reservasPrincipal
 import { Bloque, Boton, Cargando, Cifras, ConDialogo, Estado, Formulario, Franja, Pagina, Tabla, Vacio, VerFoto, nombre, useAccion, useDatos } from '../ui'
 import { decimal, fecha, fechaHora, hoy, instante } from '../formatos'
 
+// Corrección H (recupera hasta ~30 %): permite dejar libre el centro para el icono sin perder lectura.
 function CodigoQr({ contenido }) {
-  const qr = qrcode(0, 'M')
+  const qr = qrcode(0, 'H')
   qr.addData(contenido)
   qr.make()
-  return <div className="qr" role="img" aria-label="Mi código QR" dangerouslySetInnerHTML={{ __html: qr.createSvgTag({ scalable: true, margin: 2 }) }} />
+  const n = qr.getModuleCount()
+  const hueco = Math.floor(n * 0.28) | 1
+  const desde = (n - hueco) / 2
+  const enHueco = (i) => i >= desde && i < desde + hueco
+  let trazo = ''
+  for (let y = 0; y < n; y += 1) {
+    for (let x = 0; x < n; x += 1) {
+      if (qr.isDark(y, x) && !(enHueco(x) && enHueco(y))) trazo += `M${x} ${y}h1v1h-1z`
+    }
+  }
+  return (
+    <div className="qr">
+      <svg viewBox={`-2 -2 ${n + 4} ${n + 4}`} role="img" aria-label="Mi código QR">
+        <path d={trazo} fill="#000" shapeRendering="crispEdges" />
+        <image href={iconoQr} x={desde + 0.5} y={desde + 0.5} width={hueco - 1} height={hueco - 1} />
+      </svg>
+    </div>
+  )
 }
 
 const BotonHistorial = ({ abierto, onCambio }) => (

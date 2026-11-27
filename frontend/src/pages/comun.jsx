@@ -3,7 +3,7 @@ import { Check, CheckCheck, KeyRound, LogIn, Mail, Pencil } from 'lucide-react'
 import { api, pagina } from '../api'
 import { Boton, Bloque, Cargando, Formulario, Pagina, useAccion, useDatos, ConDialogo, nombre } from '../ui'
 import { fecha, fechaHora } from '../formatos'
-import logo from '../assets/logo.png'
+import logo from '../assets/logo-letras.png'
 import residencia from '../assets/residencia.png'
 
 export function Login({ onEntrar, mensaje }) {
@@ -11,8 +11,7 @@ export function Login({ onEntrar, mensaje }) {
   return (
     <main className="portada">
       <div className="portada-panel">
-        <img src={logo} alt="" className="portada-logo" />
-        <h1>ResiUP</h1>
+        <h1><img src={logo} alt="ResiUP" className="portada-logo" /></h1>
         <p>Residencia Universitaria Fernando Stahl · Universidad Peruana Unión</p>
         {mensaje && <p className="nota">{mensaje}</p>}
         {olvide ? (
