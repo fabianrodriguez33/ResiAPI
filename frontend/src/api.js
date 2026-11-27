@@ -53,6 +53,15 @@ export const api = {
   put: (ruta, cuerpo) => json(ruta, { metodo: 'PUT', cuerpo }),
   patch: (ruta, cuerpo) => json(ruta, { metodo: 'PATCH', cuerpo }),
   borrar: (ruta) => json(ruta, { metodo: 'DELETE' }),
+  /** Recorre todas las páginas de una lista paginada y las devuelve juntas. */
+  async todas(ruta) {
+    const contenido = []
+    for (let n = 0; ; n += 1) {
+      const r = await json(`${ruta}?pagina=${n}&tamanio=100`)
+      contenido.push(...r.contenido)
+      if (r.ultima || r.contenido.length === 0) return { ...r, contenido }
+    }
+  },
   async subir(archivo) {
     const formulario = new FormData()
     formulario.append('archivo', archivo)
