@@ -35,6 +35,10 @@ public abstract class PruebaIntegracion {
     protected CorreoPrueba correo;
     @Autowired
     protected pe.upeu.resi.ResiAPI.repository.SesionCultoRepository sesionesCulto;
+    @Autowired
+    private pe.upeu.resi.ResiAPI.repository.CierreReservasRepository cierresDeReservas;
+    @Autowired
+    private pe.upeu.resi.ResiAPI.repository.DiaComedorRepository diasDeComedor;
 
     @AfterEach
     void liberarReloj() {
@@ -60,17 +64,24 @@ public abstract class PruebaIntegracion {
 
     /**
      * Lunes aleatorio lejano. La base de pruebas conserva las sesiones de culto de ejecuciones anteriores y la habilitación
-     * semanal mira la semana previa, así que se elige un lunes cuya semana anterior no tenga cultos registrados.
+     * semanal mira la semana previa, así que se elige un lunes sin cultos registrados ni en esa semana ni en la anterior. Tampoco
+     * sirve una semana en la que otra prueba cerró reservas o el comedor.
      */
     protected java.time.LocalDate lunesAleatorio() {
         var azar = new java.util.Random();
         for (int intento = 0; intento < 200; intento++) {
             var lunes = java.time.LocalDate.of(2031, 1, 6).plusWeeks(azar.nextInt(3000));
-            if (sesionesCulto.fechasConSesion(lunes.minusDays(9), lunes.minusDays(1)).isEmpty()) {
+            if (sesionesCulto.fechasConSesion(lunes.minusDays(9), lunes.plusDays(6)).isEmpty() && comedorSinCierres(lunes)) {
                 return lunes;
             }
         }
-        throw new IllegalStateException("No se encontró una semana sin cultos para la prueba");
+        throw new IllegalStateException("No se encontró una semana libre para la prueba");
+    }
+
+    /** Del domingo anterior al domingo siguiente. */
+    private boolean comedorSinCierres(java.time.LocalDate lunes) {
+        return lunes.minusDays(1).datesUntil(lunes.plusDays(7)).allMatch(d -> cierresDeReservas.findByFecha(d).isEmpty()
+                && diasDeComedor.findById(d).filter(pe.upeu.resi.ResiAPI.entity.DiaComedor::isCerrado).isEmpty());
     }
 
     protected String qrDe(String username) throws Exception {
