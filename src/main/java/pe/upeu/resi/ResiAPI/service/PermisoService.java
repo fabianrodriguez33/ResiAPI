@@ -122,6 +122,8 @@ public class PermisoService {
     }
 
     private SolicitudResponse guardar(Residente residente, SolicitudRequest r, OrigenSolicitud origen, boolean requiereApoderado) {
+        // Va antes de mirar la clave y el cruce: dos envíos simultáneos del mismo residente se atienden uno tras otro.
+        residentes.findByIdForUpdate(residente.getId());
         if (r.claveCliente() != null && !r.claveCliente().isBlank()) {
             var previa = solicitudes.findByCreadoPorAndClaveCliente(sesion.obtener().id(), r.claveCliente().trim());
             if (previa.isPresent()) {
@@ -167,9 +169,7 @@ public class PermisoService {
             throw new Excepciones.SolicitudInvalida("Datos inválidos", errores);
         }
         validarReglasConfigurables(r, ahora);
-        if (solicitudes.existeSolapada(residente.getId(), r.salida(), r.retorno())) {
-            throw new Excepciones.Conflicto("Ya hay un permiso pendiente o aprobado que se superpone con ese horario");
-        }
+        exigirSinCruce(residente.getId(), r.salida(), r.retorno(), 0); // 0: aún no tiene id, no se excluye ninguno
         var s = new SolicitudPermiso();
         s.setResidenteId(residente.getId());
         s.setTipo(r.tipo());
@@ -197,6 +197,12 @@ public class PermisoService {
         auditoria.registrar(sesion.obtener().id(), "PERMISO_SOLICITADO", "solicitud_permiso", s.getId(), r.tipo().name() + " por " + origen);
         avisarSolicitud(s, residente.getId());
         return aResponse(s, false);
+    }
+
+    private void exigirSinCruce(Long residenteId, Instant inicio, Instant fin, long excluirId) {
+        if (solicitudes.existeSolapada(residenteId, inicio, fin, excluirId)) {
+            throw new Excepciones.Conflicto("Ya hay un permiso pendiente o aprobado que se superpone con ese horario");
+        }
     }
 
     private static final java.time.format.DateTimeFormatter HORA = java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm");
@@ -547,6 +553,8 @@ public class PermisoService {
         if (ampliaciones.existsBySolicitudIdAndEstado(solicitudId, EstadoRevision.PENDIENTE)) {
             throw new Excepciones.Conflicto("Ya hay una ampliación pendiente de revisión");
         }
+        residentes.findByIdForUpdate(s.getResidenteId());
+        exigirSinCruce(s.getResidenteId(), s.getRetornoAutorizado(), r.retornoNuevo(), solicitudId);
         Long evidenciaId = validarEvidencia(r.evidenciaId(), "ampliacion.evidencia.obligatoria", true);
         var a = new AmpliacionPermiso();
         a.setSolicitudId(solicitudId);
@@ -571,6 +579,10 @@ public class PermisoService {
         }
         if (d.aprobar() && s.getEstado() != EstadoSolicitud.APROBADO) {
             throw new Excepciones.Conflicto("El permiso ya no está aprobado");
+        }
+        if (d.aprobar()) {
+            residentes.findByIdForUpdate(s.getResidenteId());
+            exigirSinCruce(s.getResidenteId(), s.getRetornoAutorizado(), a.getRetornoNuevo(), s.getId());
         }
         Instant ahora = reloj.instant();
         a.setEstado(d.aprobar() ? EstadoRevision.APROBADA : EstadoRevision.RECHAZADA);

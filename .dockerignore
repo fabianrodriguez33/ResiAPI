@@ -4,3 +4,6 @@ target
 evidencias
 HELP.md
 *.md
+
+frontend/node_modules
+frontend/dist
