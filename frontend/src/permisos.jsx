@@ -1,4 +1,5 @@
 // Piezas de permisos que comparten residente, apoderado y pastor.
+import { DoorOpen } from 'lucide-react'
 import { api } from './api'
 import { Estado, Formulario, nombre } from './ui'
 import { fechaHora, instante } from './formatos'
@@ -17,7 +18,7 @@ export function DetallePermiso({ p, acciones, conNombre }) {
       {p.responsableNombre && <p className="tenue">Responsable: {p.responsableNombre} ({p.responsableCelular}) · Va con: {p.acompanante}</p>}
       {p.comentarioDecision && <p className="tenue">Respuesta: {p.comentarioDecision}</p>}
       {(p.garitaSalida || p.garitaEntrada) && (
-        <p className="tenue">Garita: salió {fechaHora(p.garitaSalida)} · volvió {fechaHora(p.garitaEntrada)}</p>
+        <p className="tenue con-icono"><DoorOpen size={16} />Garita: salió {fechaHora(p.garitaSalida)} · volvió {fechaHora(p.garitaEntrada)}</p>
       )}
       {acciones && <div className="acciones">{acciones}</div>}
     </article>

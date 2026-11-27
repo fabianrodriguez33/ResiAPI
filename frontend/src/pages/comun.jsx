@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Check, CheckCheck, KeyRound, LogIn, Mail, Pencil } from 'lucide-react'
 import { api, pagina } from '../api'
 import { Boton, Bloque, Cargando, Formulario, Pagina, useAccion, useDatos, ConDialogo, nombre } from '../ui'
 import { fecha, fechaHora } from '../formatos'
@@ -19,6 +20,7 @@ export function Login({ onEntrar, mensaje }) {
             key="olvide"
             campos={[{ n: 'username', t: 'Usuario o código', requerido: true }]}
             boton="Pedir una clave provisional"
+            icono={Mail}
             enviar={(v) => api.post('/auth/olvide-clave', v)}
             exito="Si el usuario tiene un correo verificado, recibirá una clave provisional."
             alTerminar={() => setOlvide(false)}
@@ -31,6 +33,7 @@ export function Login({ onEntrar, mensaje }) {
               { n: 'password', t: 'Contraseña', tipo: 'password', requerido: true },
             ]}
             boton="Ingresar"
+            icono={LogIn}
             enviar={(v) => api.post('/auth/login', { username: v.username.trim(), password: v.password })}
             alTerminar={onEntrar}
           />
@@ -52,6 +55,7 @@ export function CambiarClave({ alTerminar }) {
         { n: 'claveNueva', t: 'Clave nueva', tipo: 'password', requerido: true, ayuda: 'Al menos 8 caracteres' },
       ]}
       boton="Cambiar clave"
+      icono={KeyRound}
       enviar={(v) => api.post('/auth/cambiar-clave', v)}
       exito="Clave cambiada"
       alTerminar={alTerminar}
@@ -77,7 +81,7 @@ export function Perfil() {
                 <dt>Celular</dt><dd>{p.telefono || '—'}</dd>
               </dl>
               <div className="acciones">
-                <ConDialogo texto="Cambiar datos">
+                <ConDialogo texto="Cambiar datos" icono={Pencil}>
                   {(cerrar) => (
                     <Formulario
                       campos={[
@@ -93,14 +97,15 @@ export function Perfil() {
                 </ConDialogo>
                 {p.email && !p.emailVerificado && (
                   <>
-                    <Boton variante="secundario" disabled={ocupado} onClick={() => ejecutar(() => api.post('/perfil/correo/codigo'), 'Te enviamos un código. Revisa también el spam.')}>
+                    <Boton variante="secundario" icono={Mail} disabled={ocupado} onClick={() => ejecutar(() => api.post('/perfil/correo/codigo'), 'Te enviamos un código. Revisa también el spam.')}>
                       Enviar código al correo
                     </Boton>
-                    <ConDialogo texto="Escribir código">
+                    <ConDialogo texto="Escribir código" icono={KeyRound}>
                       {(cerrar) => (
                         <Formulario
                           campos={[{ n: 'codigo', t: 'Código recibido', requerido: true }]}
                           boton="Verificar"
+                          icono={Check}
                           enviar={(v) => api.post('/perfil/correo/verificar', v)}
                           exito="Correo verificado"
                           alTerminar={() => { cerrar(); perfil.recargar() }}
@@ -124,8 +129,8 @@ export function Avisos({ alLeer }) {
   const [ejecutar] = useAccion()
   const despues = () => { avisos.recargar(); alLeer?.() }
   return (
-    <Pagina titulo="Avisos" acciones={<Boton variante="secundario" onClick={() => ejecutar(() => api.post('/notificaciones/leidas'), null, despues)}>Marcar todo como leído</Boton>}>
-      <Cargando datos={avisos} vacio="No tienes avisos.">
+    <Pagina titulo="Avisos" acciones={<Boton variante="secundario" icono={CheckCheck} onClick={() => ejecutar(() => api.post('/notificaciones/leidas'), null, despues)}>Marcar todo como leído</Boton>}>
+      <Cargando datos={avisos} vacio="No tienes avisos. Aquí llegarán las novedades de tus permisos y reservas.">
         {(lista) => (
           <ul className="lista-avisos">
             {lista.map((a) => (
@@ -135,7 +140,7 @@ export function Avisos({ alLeer }) {
                   <p>{a.mensaje}</p>
                   <small>{fechaHora(a.creadaEn)}</small>
                 </div>
-                {!a.leida && <Boton variante="enlace" onClick={() => ejecutar(() => api.post(`/notificaciones/${a.id}/leida`), null, despues)}>Leído</Boton>}
+                {!a.leida && <Boton variante="enlace" icono={Check} onClick={() => ejecutar(() => api.post(`/notificaciones/${a.id}/leida`), null, despues)}>Leído</Boton>}
               </li>
             ))}
           </ul>

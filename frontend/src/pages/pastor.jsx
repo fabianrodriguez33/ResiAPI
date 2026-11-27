@@ -1,11 +1,49 @@
 import { useCallback, useState } from 'react'
+import {
+  ArrowLeft, BookOpen, ChartColumn, Check, ChevronRight, ClipboardCheck, Download, Lock, LockOpen, Trash2, UserCheck, X,
+} from 'lucide-react'
 import { api, pagina } from '../api'
 import { DetallePermiso } from '../permisos'
 import {
-  Bloque, Boton, Cargando, Cifras, ConDialogo, ConMotivo, Estado, Formulario, LectorQr, Pagina, Pestanas, Tabla, VerFoto,
+  Bloque, Boton, Cargando, Cifras, ConDialogo, ConMotivo, Estado, Formulario, Franja, LectorQr, Pagina, Pestanas, Tabla, Vacio, VerFoto,
   nombre, useAccion, useDatos,
 } from '../ui'
 import { decimal, fecha, fechaHora, hoy } from '../formatos'
+
+/* ---------- inicio ---------- */
+
+export function Inicio() {
+  const permisos = useDatos(pagina('/permisos/solicitudes?estado=PENDIENTE_PRECEPTOR', 1), { cada: 15000 })
+  const ampliaciones = useDatos(pagina('/permisos/ampliaciones/pendientes', 1), { cada: 15000 })
+  const justificaciones = useDatos(pagina('/permisos/justificaciones/pendientes', 1), { cada: 30000 })
+  const reservas = useDatos(`/reservas/del-dia?fecha=${hoy()}`, { cada: 30000 })
+  const faltas = useDatos('/habilitacion/faltas-por-justificar', { cada: 60000 })
+  // Primero lo que vence antes: permisos y ampliaciones tienen hora de salida o de retorno.
+  const fuentes = [
+    ['#/permisos', 'Permisos por revisar', permisos, permisos.datos?.totalElementos],
+    ['#/permisos/ampliaciones', 'Ampliaciones por revisar', ampliaciones, ampliaciones.datos?.totalElementos],
+    ['#/reservas', 'Reservas de hoy sin responder', reservas, reservas.datos?.filter((r) => r.estado === 'PENDIENTE').length],
+    ['#/permisos/justificaciones', 'Justificaciones por revisar', justificaciones, justificaciones.datos?.totalElementos],
+    ['#/faltas', 'Faltas por justificar', faltas, faltas.datos?.length],
+  ]
+  const cargando = fuentes.some(([, , d]) => d.cargando)
+  const fallo = fuentes.find(([, , d]) => d.error && !d.datos)?.[2]
+  const pendientes = fuentes.filter(([, , , n]) => n > 0)
+
+  return (
+    <Pagina titulo="Inicio" sub="Lo que espera tu respuesta">
+      {fallo ? <Cargando datos={fallo} /> : cargando ? <p className="vacio">Cargando…</p> : pendientes.length === 0 ? (
+        <Vacio accion={<a href="#/cultos">Ir a cultos</a>}>No tienes nada pendiente por revisar.</Vacio>
+      ) : (
+        <ul className="pendientes">
+          {pendientes.map(([enlace, titulo, , n]) => (
+            <li key={enlace}><a href={enlace}><strong>{n}</strong><span>{titulo}</span><ChevronRight size={20} /></a></li>
+          ))}
+        </ul>
+      )}
+    </Pagina>
+  )
+}
 
 /* ---------- permisos ---------- */
 
@@ -26,14 +64,14 @@ function ListaPermisos({ estado }) {
   const lista = useDatos(pagina(`/permisos/solicitudes?estado=${estado}`), { cada: 10000 })
   const [ejecutar, ocupado] = useAccion()
   return (
-    <Cargando datos={lista} vacio="No hay permisos en esta bandeja.">
+    <Cargando datos={lista} vacio="No hay permisos en esta bandeja." accion={estado !== 'PENDIENTE_PRECEPTOR' ? null : <a href="#/inicio">Ver otros pendientes</a>}>
       {(l) => l.map((p) => (
         <DetallePermiso key={p.id} p={p} conNombre acciones={(
           <>
-            <ConDialogo texto="Ver asistencias y limpieza" titulo={p.residenteNombre} variante="enlace">{() => <Resumen id={p.id} />}</ConDialogo>
+            <ConDialogo texto="Ver asistencias y limpieza" titulo={p.residenteNombre} variante="enlace" icono={ChartColumn}>{() => <Resumen id={p.id} />}</ConDialogo>
             {p.estado === 'PENDIENTE_PRECEPTOR' && (
               <>
-                <Boton disabled={ocupado} onClick={() => ejecutar(() => api.post(`/permisos/solicitudes/${p.id}/decision`, { aprobar: true }), 'Permiso aprobado', lista.recargar)}>Aprobar</Boton>
+                <Boton icono={Check} disabled={ocupado} onClick={() => ejecutar(() => api.post(`/permisos/solicitudes/${p.id}/decision`, { aprobar: true }), 'Permiso aprobado', lista.recargar)}>Aprobar</Boton>
                 <ConMotivo texto="Rechazar" etiqueta="Comentario" enviar={(comentario) => api.post(`/permisos/solicitudes/${p.id}/decision`, { aprobar: false, comentario })} alTerminar={lista.recargar} />
               </>
             )}
@@ -60,8 +98,8 @@ function Revisiones({ ruta, vacio }) {
           {x.retornoNuevo && <p className="tenue">Retorno: {fechaHora(x.retornoOriginal)} → {fechaHora(x.retornoNuevo)}</p>}
           <div className="acciones">
             <VerFoto id={x.evidenciaId} />
-            <Boton onClick={() => decidir(x.id, true)}>Aprobar</Boton>
-            <Boton variante="peligro" onClick={() => decidir(x.id, false)}>Rechazar</Boton>
+            <Boton icono={Check} onClick={() => decidir(x.id, true)}>Aprobar</Boton>
+            <Boton variante="peligro" icono={X} onClick={() => decidir(x.id, false)}>Rechazar</Boton>
           </div>
         </article>
       ))}
@@ -69,8 +107,8 @@ function Revisiones({ ruta, vacio }) {
   )
 }
 
-export function Permisos() {
-  const [vista, setVista] = useState('PENDIENTE_PRECEPTOR')
+export function Permisos({ apartado }) {
+  const [vista, setVista] = useState(apartado || 'PENDIENTE_PRECEPTOR')
   return (
     <Pagina titulo="Permisos">
       <Pestanas valor={vista} onCambio={setVista} opciones={[
@@ -109,9 +147,9 @@ function Sesion({ id, volver }) {
       sub={s && `${s.presentes} presentes · ${abierta ? 'abierto' : 'cerrado'}`}
       acciones={(
         <>
-          <Boton variante="enlace" onClick={volver}>Volver</Boton>
-          <Boton variante="secundario" onClick={() => ejecutar(() => api.descargar(`/cultos/sesiones/${id}/exportar`, `culto-${s.fecha}.csv`))}>Exportar</Boton>
-          {s && <Boton variante={abierta ? 'peligro' : 'secundario'} onClick={() => ejecutar(() => api.post(`/cultos/sesiones/${id}/${abierta ? 'cerrar' : 'reabrir'}`), abierta ? 'Culto cerrado' : 'Culto reabierto', recargar)}>{abierta ? 'Cerrar culto' : 'Reabrir'}</Boton>}
+          <Boton variante="enlace" icono={ArrowLeft} onClick={volver}>Volver</Boton>
+          <Boton variante="secundario" icono={Download} onClick={() => ejecutar(() => api.descargar(`/cultos/sesiones/${id}/exportar`, `culto-${s.fecha}.csv`))}>Exportar</Boton>
+          {s && <Boton variante={abierta ? 'peligro' : 'secundario'} icono={abierta ? Lock : LockOpen} onClick={() => ejecutar(() => api.post(`/cultos/sesiones/${id}/${abierta ? 'cerrar' : 'reabrir'}`), abierta ? 'Culto cerrado' : 'Culto reabierto', recargar)}>{abierta ? 'Cerrar culto' : 'Reabrir'}</Boton>}
         </>
       )}
     >
@@ -119,14 +157,14 @@ function Sesion({ id, volver }) {
         <Bloque titulo="Registrar asistencia">
           <form className="fila" onSubmit={(e) => { e.preventDefault(); if (codigo.trim()) registrar({ codigo: codigo.trim() }) }}>
             <input aria-label="Código del residente" placeholder="Código del residente" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-            <button type="submit" className="boton boton-principal" disabled={ocupado}>Registrar</button>
+            <button type="submit" className="boton boton-principal" disabled={ocupado}><UserCheck size={17} />Registrar</button>
           </form>
           <LectorQr onCodigo={porQr} />
         </Bloque>
       )}
       <Bloque titulo="Presentes">
         <input type="search" aria-label="Buscar presente" placeholder="Buscar por nombre o código" value={buscado} onChange={(e) => setBuscado(e.target.value)} />
-        {filtrados.length === 0 ? <p className="vacio">Nadie que mostrar.</p> : (
+        {filtrados.length === 0 ? <Vacio>{buscado ? 'Nadie coincide con la búsqueda.' : 'Aún no hay presentes. Registra por código o QR.'}</Vacio> : (
           <Tabla filas={filtrados} columnas={[
             ['Residente', (a) => a.nombreCompleto], ['Código', (a) => a.codigo], ['Hora', (a) => fechaHora(a.registradoEn)],
             ['Puntualidad', (a) => (a.despuesDelCorte ? 'Tarde' : 'A tiempo')],
@@ -149,17 +187,17 @@ export function Cultos() {
   return (
     <Pagina titulo="Cultos" acciones={(
       <>
-        <Boton disabled={ocupado} onClick={() => abrir('MATUTINO')}>Abrir matutino</Boton>
-        <Boton disabled={ocupado} onClick={() => abrir('VESPERTINO')}>Abrir vespertino</Boton>
+        <Boton icono={BookOpen} disabled={ocupado} onClick={() => abrir('MATUTINO')}>Abrir matutino</Boton>
+        <Boton icono={BookOpen} disabled={ocupado} onClick={() => abrir('VESPERTINO')}>Abrir vespertino</Boton>
       </>
     )}>
       <label className="campo campo-corto"><span>Fecha</span><input type="date" value={dia} max={hoy()} onChange={(e) => setDia(e.target.value)} /></label>
-      <Cargando datos={sesiones} vacio="No hubo cultos ese día.">
+      <Cargando datos={sesiones} vacio="No hubo cultos ese día. Abre uno con los botones de arriba o cambia la fecha.">
         {(l) => l.map((s) => (
           <article className="item" key={s.id}>
             <header><strong>Culto {nombre(s.tipo).toLowerCase()}</strong><Estado valor={s.estado} /></header>
             <p className="tenue">{s.presentes} presentes · inició {fechaHora(s.inicio)}</p>
-            <div className="acciones"><Boton variante="secundario" onClick={() => setAbierta(s.id)}>Ver lista</Boton></div>
+            <div className="acciones"><Boton variante="secundario" icono={ClipboardCheck} onClick={() => setAbierta(s.id)}>Ver lista</Boton></div>
           </article>
         ))}
       </Cargando>
@@ -220,7 +258,7 @@ function FormularioEvaluacion({ habitacion, dia, previa, alTerminar }) {
           {PERSONALES.map(([k, t, max]) => <Nota key={k} etiqueta={t} max={max} valor={p[k]} onCambio={(v) => setPersonas((a) => a.map((x, j) => (j === i ? { ...x, [k]: v } : x)))} />)}
         </fieldset>
       ))}
-      <button type="submit" className="boton boton-principal" disabled={ocupado}>{corregir ? 'Guardar cambios' : 'Registrar evaluación'}</button>
+      <button type="submit" className="boton boton-principal" disabled={ocupado}><Check size={17} />{corregir ? 'Guardar cambios' : 'Registrar evaluación'}</button>
     </form>
   )
 }
@@ -231,20 +269,20 @@ export function Limpieza() {
   return (
     <Pagina titulo="Limpieza" sub="Evaluación por habitación">
       <label className="campo campo-corto"><span>Fecha</span><input type="date" value={dia} max={hoy()} onChange={(e) => setDia(e.target.value)} /></label>
-      <Cargando datos={habitaciones} vacio="No hay habitaciones.">
+      <Cargando datos={habitaciones} vacio="No hay habitaciones con residentes. La asignación la hace administración.">
         {(l) => (
-          <div className="rejilla">
+          <div className="lista-filas">
             {l.map((h) => (
               <article className="item" key={h.habitacionId}>
-                <header><strong>Habitación {h.numero}</strong>{h.evaluados > 0 && <span className="estado estado-bien">Evaluada</span>}</header>
+                <header><strong>Habitación {h.numero}</strong>{h.evaluados > 0 && <Estado valor="APROBADO" texto="Evaluada" />}</header>
                 {h.residentes.length === 0 ? <p className="tenue">Cuarto no disponible</p> : (
                   <>
                     <p className="tenue">{h.residentes.map((r) => r.nombreCompleto.split(' ').slice(0, 2).join(' ')).join(', ')}</p>
                     <div className="acciones">
-                      <ConDialogo texto={h.evaluados > 0 ? 'Corregir' : 'Evaluar'} titulo={`Habitación ${h.numero}`}>
+                      <ConDialogo texto={h.evaluados > 0 ? 'Corregir' : 'Evaluar'} icono={ClipboardCheck} titulo={`Habitación ${h.numero}`}>
                         {(cerrar) => <Evaluacion habitacion={h} dia={dia} alTerminar={() => { cerrar(); habitaciones.recargar() }} />}
                       </ConDialogo>
-                      {h.evaluados > 0 && <ConMotivo texto="Eliminar" variante="enlace" enviar={(motivo) => api.post(`/limpieza/habitaciones/${h.habitacionId}/eliminar`, { fecha: dia, motivo })} alTerminar={habitaciones.recargar} />}
+                      {h.evaluados > 0 && <ConMotivo texto="Eliminar" icono={Trash2} variante="enlace" enviar={(motivo) => api.post(`/limpieza/habitaciones/${h.habitacionId}/eliminar`, { fecha: dia, motivo })} alTerminar={habitaciones.recargar} />}
                     </div>
                   </>
                 )}
@@ -277,16 +315,16 @@ export function Reservas() {
   return (
     <Pagina titulo="Reservas de comida" acciones={(
       <>
-        <Boton variante="secundario" disabled={ocupado} onClick={() => ejecutar(() => api.descargar(`/reservas/exportar?fecha=${dia}&grupo=${grupo}`, `reservas-${grupo.toLowerCase()}-${dia}.csv`))}>Exportar</Boton>
-        <Boton variante="secundario" disabled={ocupado} onClick={() => ejecutar(() => api.post('/reservas/abrir', { fecha: dia, grupo }), 'Reservas abiertas', recargar)}>Abrir reservas</Boton>
-        <Boton variante="peligro" disabled={ocupado} onClick={() => window.confirm('Al cerrar se cancelan las pendientes. ¿Continuar?') && ejecutar(() => api.post('/reservas/cerrar', { fecha: dia, grupo }), 'Reservas cerradas', recargar)}>Cerrar reservas</Boton>
+        <Boton variante="secundario" icono={Download} disabled={ocupado} onClick={() => ejecutar(() => api.descargar(`/reservas/exportar?fecha=${dia}&grupo=${grupo}`, `reservas-${grupo.toLowerCase()}-${dia}.csv`))}>Exportar</Boton>
+        <Boton variante="secundario" icono={LockOpen} disabled={ocupado} onClick={() => ejecutar(() => api.post('/reservas/abrir', { fecha: dia, grupo }), 'Reservas abiertas', recargar)}>Abrir reservas</Boton>
+        <Boton variante="peligro" icono={Lock} disabled={ocupado} onClick={() => window.confirm('Al cerrar se cancelan las pendientes. ¿Continuar?') && ejecutar(() => api.post('/reservas/cerrar', { fecha: dia, grupo }), 'Reservas cerradas', recargar)}>Cerrar reservas</Boton>
       </>
     )}>
       <label className="campo campo-corto"><span>Fecha</span><input type="date" value={dia} onChange={(e) => setDia(e.target.value)} /></label>
       <Pestanas valor={grupo} onCambio={setGrupo} opciones={GRUPOS.map(([v, t]) => [v, t])} />
       <p className="tenue">{cerrada ? 'Cerradas para esta fecha.' : abierta ? 'Abiertas por el pastor.' : 'Según el horario normal.'} {delGrupo.length} registros.</p>
-      <Cargando datos={lista} vacio="No hay reservas ese día.">
-        {() => (delGrupo.length === 0 ? <p className="vacio">No hay reservas de esta comida.</p> : (
+      <Cargando datos={lista} vacio="No hay reservas ese día. Cambia la fecha o abre las reservas.">
+        {() => (delGrupo.length === 0 ? <Vacio>No hay reservas de esta comida. Revisa las otras pestañas.</Vacio> : (
           <Tabla filas={delGrupo} columnas={[
             ['Residente', (r) => r.residenteNombre], ['Código', (r) => r.codigo], ['Comida', (r) => nombre(r.tipo)],
             ['Detalle', (r) => [r.motivo, r.curso, r.observacion].filter(Boolean).join(' · ') || '—'],
@@ -296,11 +334,11 @@ export function Reservas() {
                 <VerFoto id={r.evidenciaId} />
                 {r.estado === 'PENDIENTE' && (
                   <>
-                    <Boton onClick={() => ejecutar(() => api.post(`/reservas/${r.id}/decision`, { aprobar: true }), 'Reserva aprobada', lista.recargar)}>Aprobar</Boton>
+                    <Boton icono={Check} onClick={() => ejecutar(() => api.post(`/reservas/${r.id}/decision`, { aprobar: true }), 'Reserva aprobada', lista.recargar)}>Aprobar</Boton>
                     <ConMotivo texto="Rechazar" etiqueta="Comentario" enviar={(comentario) => api.post(`/reservas/${r.id}/decision`, { aprobar: false, comentario })} alTerminar={lista.recargar} />
                   </>
                 )}
-                {['PENDIENTE', 'RESERVADA'].includes(r.estado) && <ConMotivo texto="Eliminar" variante="enlace" enviar={(motivo) => api.post(`/reservas/${r.id}/cancelar-pastor`, { motivo })} alTerminar={lista.recargar} />}
+                {['PENDIENTE', 'RESERVADA'].includes(r.estado) && <ConMotivo texto="Eliminar" icono={Trash2} variante="enlace" enviar={(motivo) => api.post(`/reservas/${r.id}/cancelar-pastor`, { motivo })} alTerminar={lista.recargar} />}
               </div>
             )],
           ]} />
@@ -316,10 +354,10 @@ export function Faltas() {
   const lista = useDatos('/habilitacion/faltas-por-justificar')
   return (
     <Pagina titulo="Faltas por justificar" sub="Con dos faltas sin justificar en la semana, el residente queda sin permisos la semana siguiente">
-      <Cargando datos={lista} vacio="No hay faltas por justificar.">
+      <Cargando datos={lista} vacio="No hay faltas por justificar." accion={<a href="#/inicio">Ver otros pendientes</a>}>
         {(l) => <Tabla filas={l} clave={(f) => `${f.residenteId}-${f.fecha}`} columnas={[
           ['Residente', (f) => f.nombre], ['Código', (f) => f.codigo], ['Falta', (f) => fecha(f.fecha)], ['Plazo', (f) => fecha(f.plazo)],
-          ['', (f) => <ConMotivo texto="Justificar" variante="secundario" enviar={(motivo) => api.post('/habilitacion/faltas/justificar', { residenteId: f.residenteId, fecha: f.fecha, motivo })} alTerminar={lista.recargar} />],
+          ['', (f) => <ConMotivo texto="Justificar" icono={Check} variante="secundario" enviar={(motivo) => api.post('/habilitacion/faltas/justificar', { residenteId: f.residenteId, fecha: f.fecha, motivo })} alTerminar={lista.recargar} />],
         ]} />}
       </Cargando>
     </Pagina>
@@ -333,10 +371,10 @@ export function Reporte() {
   const [ejecutar] = useAccion()
   return (
     <Pagina titulo="Reporte mensual" acciones={(
-      <Boton variante="secundario" onClick={() => ejecutar(() => api.descargar(`/reportes/mensual.xlsx?anio=${anio}&mes=${m}`, `reporte-${mes}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))}>Descargar Excel</Boton>
+      <Boton variante="secundario" icono={Download} onClick={() => ejecutar(() => api.descargar(`/reportes/mensual.xlsx?anio=${anio}&mes=${m}`, `reporte-${mes}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))}>Descargar Excel</Boton>
     )}>
       <label className="campo campo-corto"><span>Mes</span><input type="month" value={mes} onChange={(e) => e.target.value && setMes(e.target.value)} /></label>
-      <Cargando datos={filas} vacio="Sin datos.">
+      <Cargando datos={filas} vacio="No hay datos de ese mes. Elige otro.">
         {(l) => <Tabla filas={l} clave={(f) => f.residenteId} columnas={[
           ['Residente', (f) => f.nombreCompleto], ['Código', (f) => f.codigo], ['Habitación', (f) => f.habitacion || '—'],
           ['Asistencia', (f) => (f.resumen.porcentajeAsistencia == null ? '—' : `${Math.round(f.resumen.porcentajeAsistencia)} %`)],

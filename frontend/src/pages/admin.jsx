@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { BedDouble, Check, KeyRound, MailCheck, Pencil, Plus, Power, Users, X } from 'lucide-react'
 import { api, pagina } from '../api'
-import { Bloque, Boton, Cargando, Cifras, ConDialogo, Estado, Formulario, Pagina, Tabla, nombre, useAccion, useDatos } from '../ui'
+import { Bloque, Boton, Cargando, Cifras, ConDialogo, Estado, Formulario, Franja, Pagina, Tabla, nombre, useAccion, useDatos } from '../ui'
 import { fecha, fechaHora } from '../formatos'
 
 const filtrar = (lista, texto, campos) => {
@@ -52,7 +53,7 @@ export function Residentes() {
 
   return (
     <Pagina titulo="Residentes" sub={lista.datos && `${lista.datos.totalElementos} registrados`} acciones={(
-      <ConDialogo texto="Nuevo residente" variante="principal">
+      <ConDialogo texto="Nuevo residente" variante="principal" icono={Plus}>
         {(cerrar) => (
           <Formulario
             campos={[
@@ -67,15 +68,18 @@ export function Residentes() {
         )}
       </ConDialogo>
     )}>
+      {lista.datos?.contenido.some((r) => r.activo && !r.habitacion) && (
+        <Franja tono="espera">Residentes activos sin habitación: {lista.datos.contenido.filter((r) => r.activo && !r.habitacion).length}</Franja>
+      )}
       <input type="search" aria-label="Buscar residente" placeholder="Buscar por nombre o código" value={texto} onChange={(e) => setTexto(e.target.value)} />
-      <Cargando datos={lista} vacio="No hay residentes.">
+      <Cargando datos={lista} vacio="Aún no hay residentes. Crea el primero con «Nuevo residente».">
         {(l) => <Tabla filas={filtrar(l, texto, ['nombreCompleto', 'codigo'])} columnas={[
           ['Residente', (r) => r.nombreCompleto], ['Código', (r) => r.codigo],
           ['Habitación', (r) => (r.habitacion ? `${r.habitacion.numero} ${r.habitacion.cama ?? ''}` : 'Sin asignar')],
           ['Estado', (r) => <Estado valor={r.activo ? 'ACTIVO' : 'INACTIVO'} />],
           ['', (r) => (
             <div className="acciones">
-              <ConDialogo texto="Editar" titulo={r.nombreCompleto}>
+              <ConDialogo texto="Editar" titulo={r.nombreCompleto} icono={Pencil}>
                 {(cerrar) => (
                   <Formulario
                     campos={[...CAMPOS_PERSONA, { n: 'puedeSolicitarSolo', t: 'Puede pedir permisos sin apoderado', tipo: 'check' }, { n: 'activo', t: 'Activo', tipo: 'check' }]}
@@ -86,7 +90,7 @@ export function Residentes() {
                   />
                 )}
               </ConDialogo>
-              <ConDialogo texto="Habitación" titulo={r.nombreCompleto}>
+              <ConDialogo texto="Habitación" titulo={r.nombreCompleto} icono={BedDouble}>
                 {(cerrar) => (
                   <>
                     <Formulario
@@ -99,13 +103,13 @@ export function Residentes() {
                       exito="Habitación asignada"
                       alTerminar={() => { cerrar(); recargar() }}
                     />
-                    {r.habitacion && <Boton variante="peligro" onClick={() => ejecutar(() => api.post(`/residentes/${r.id}/liberar-habitacion`), 'Habitación liberada', () => { cerrar(); recargar() })}>Liberar habitación actual</Boton>}
+                    {r.habitacion && <Boton variante="peligro" icono={X} onClick={() => ejecutar(() => api.post(`/residentes/${r.id}/liberar-habitacion`), 'Habitación liberada', () => { cerrar(); recargar() })}>Liberar habitación actual</Boton>}
                   </>
                 )}
               </ConDialogo>
-              <ConDialogo texto="Apoderados" titulo={r.nombreCompleto} variante="enlace">{() => <Apoderados id={r.id} />}</ConDialogo>
+              <ConDialogo texto="Apoderados" titulo={r.nombreCompleto} variante="enlace" icono={Users}>{() => <Apoderados id={r.id} />}</ConDialogo>
               {r.email && !r.emailVerificado && (
-                <Boton variante="enlace" onClick={() => ejecutar(() => api.post(`/usuarios/${r.usuarioId}/verificar-correo`), 'Correo verificado', lista.recargar)}>Verificar correo</Boton>
+                <Boton variante="enlace" icono={MailCheck} onClick={() => ejecutar(() => api.post(`/usuarios/${r.usuarioId}/verificar-correo`), 'Correo verificado', lista.recargar)}>Verificar correo</Boton>
               )}
             </div>
           )],
@@ -124,7 +128,7 @@ export function Habitaciones() {
   const campos = [{ n: 'numero', t: 'Número', requerido: true }, { n: 'capacidad', t: 'Capacidad', tipo: 'number', requerido: true }, { n: 'activa', t: 'Activa', tipo: 'check' }]
   return (
     <Pagina titulo="Habitaciones" acciones={(
-      <ConDialogo texto="Nueva habitación" variante="principal">
+      <ConDialogo texto="Nueva habitación" variante="principal" icono={Plus}>
         {(cerrar) => <Formulario campos={campos} inicial={{ activa: true }} enviar={(v) => api.post('/habitaciones', { ...v, capacidad: Number(v.capacidad) })} exito="Habitación creada" alTerminar={() => { cerrar(); recargar() }} />}
       </ConDialogo>
     )}>
@@ -136,7 +140,7 @@ export function Habitaciones() {
           ['Número', (h) => h.numero], ['Capacidad', (h) => h.capacidad], ['Ocupantes', (h) => h.ocupantes], ['Libres', (h) => h.disponibles],
           ['Estado', (h) => <Estado valor={h.activa ? 'ACTIVO' : 'INACTIVO'} />],
           ['', (h) => (
-            <ConDialogo texto="Editar" titulo={`Habitación ${h.numero}`}>
+            <ConDialogo texto="Editar" titulo={`Habitación ${h.numero}`} icono={Pencil}>
               {(cerrar) => <Formulario campos={campos} inicial={h} enviar={(v) => api.put(`/habitaciones/${h.id}`, { ...v, capacidad: Number(v.capacidad) })} exito="Cambios guardados" alTerminar={() => { cerrar(); recargar() }} />}
             </ConDialogo>
           )],
@@ -154,7 +158,7 @@ export function Usuarios() {
   const [ejecutar] = useAccion()
   return (
     <Pagina titulo="Usuarios" acciones={(
-      <ConDialogo texto="Nuevo usuario" variante="principal">
+      <ConDialogo texto="Nuevo usuario" variante="principal" icono={Plus}>
         {(cerrar) => (
           <Formulario
             campos={[
@@ -177,13 +181,13 @@ export function Usuarios() {
           ['Estado', (u) => <Estado valor={u.activo ? 'ACTIVO' : 'INACTIVO'} />],
           ['', (u) => (
             <div className="acciones">
-              <Boton variante="enlace" onClick={() => window.confirm(`¿${u.activo ? 'Desactivar' : 'Activar'} a ${u.username}?`) && ejecutar(() => api.patch(`/usuarios/${u.id}`, { activo: !u.activo }), 'Listo', lista.recargar)}>
+              <Boton variante="enlace" icono={Power} onClick={() => window.confirm(`¿${u.activo ? 'Desactivar' : 'Activar'} a ${u.username}?`) && ejecutar(() => api.patch(`/usuarios/${u.id}`, { activo: !u.activo }), 'Listo', lista.recargar)}>
                 {u.activo ? 'Desactivar' : 'Activar'}
               </Boton>
-              <ConDialogo texto="Nueva clave" titulo={u.nombreCompleto} variante="enlace">
+              <ConDialogo texto="Nueva clave" titulo={u.nombreCompleto} variante="enlace" icono={KeyRound}>
                 {(cerrar) => <Formulario campos={[{ n: 'password', t: 'Clave nueva', tipo: 'password', requerido: true }]} enviar={(v) => api.patch(`/usuarios/${u.id}`, v)} exito="Clave actualizada" alTerminar={cerrar} />}
               </ConDialogo>
-              <Boton variante="enlace" onClick={() => ejecutar(() => api.post(`/usuarios/${u.id}/verificar-correo`), 'Correo verificado')}>Verificar correo</Boton>
+              <Boton variante="enlace" icono={MailCheck} onClick={() => ejecutar(() => api.post(`/usuarios/${u.id}/verificar-correo`), 'Correo verificado')}>Verificar correo</Boton>
             </div>
           )],
         ]} />}
@@ -202,7 +206,7 @@ export function Ajustes() {
     <Pagina titulo="Semestre y reglas">
       <Bloque titulo="Semestres" acciones={(
         <>
-          <ConDialogo texto="Nuevo semestre">
+          <ConDialogo texto="Nuevo semestre" icono={Plus}>
             {(cerrar) => (
               <Formulario
                 campos={[{ n: 'nombre', t: 'Nombre', requerido: true }, { n: 'inicio', t: 'Inicio', tipo: 'date', requerido: true }, { n: 'fin', t: 'Fin', tipo: 'date', requerido: true }]}
@@ -212,10 +216,10 @@ export function Ajustes() {
               />
             )}
           </ConDialogo>
-          <Boton variante="peligro" onClick={() => window.confirm('Terminar el semestre afecta a todos los residentes y no se puede deshacer. ¿Continuar?') && ejecutar(() => api.post('/semestres/terminar'), 'Semestre terminado', semestres.recargar)}>Terminar semestre actual</Boton>
+          <Boton variante="peligro" icono={Power} onClick={() => window.confirm('Terminar el semestre afecta a todos los residentes y no se puede deshacer. ¿Continuar?') && ejecutar(() => api.post('/semestres/terminar'), 'Semestre terminado', semestres.recargar)}>Terminar semestre actual</Boton>
         </>
       )}>
-        <Cargando datos={semestres} vacio="No hay semestres.">
+        <Cargando datos={semestres} vacio="No hay semestres. Crea uno con «Nuevo semestre».">
           {(l) => <Tabla filas={l} columnas={[['Nombre', (s) => s.nombre], ['Inicio', (s) => fecha(s.inicio)], ['Fin', (s) => fecha(s.fin)], ['Estado', (s) => <Estado valor={s.activo ? 'ACTIVO' : 'INACTIVO'} />]]} />}
         </Cargando>
       </Bloque>
@@ -224,7 +228,7 @@ export function Ajustes() {
           {(l) => <Tabla filas={l} clave={(c) => c.clave} columnas={[
             ['Regla', (c) => c.descripcion || c.clave], ['Valor', (c) => c.valor],
             ['', (c) => (
-              <ConDialogo texto="Cambiar" titulo={c.descripcion || c.clave} variante="enlace">
+              <ConDialogo texto="Cambiar" titulo={c.descripcion || c.clave} variante="enlace" icono={Pencil}>
                 {(cerrar) => <Formulario campos={[{ n: 'valor', t: 'Valor', requerido: true }]} inicial={c} enviar={(v) => api.put(`/configuracion/${c.clave}`, v)} exito="Regla actualizada" alTerminar={() => { cerrar(); config.recargar() }} />}
               </ConDialogo>
             )],
@@ -239,7 +243,7 @@ export function Auditoria() {
   const lista = useDatos(pagina('/auditoria'))
   return (
     <Pagina titulo="Auditoría">
-      <Cargando datos={lista} vacio="Sin registros.">
+      <Cargando datos={lista} vacio="Todavía no hay acciones registradas.">
         {(l) => <Tabla filas={l} columnas={[
           ['Fecha', (a) => fechaHora(a.creadoEn)], ['Acción', (a) => nombre(a.accion)], ['Sobre', (a) => `${a.entidad} ${a.entidadId ?? ''}`], ['Detalle', (a) => a.detalle || '—'],
         ]} />}
