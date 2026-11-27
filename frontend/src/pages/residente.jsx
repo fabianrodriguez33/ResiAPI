@@ -1,7 +1,9 @@
 import qrcode from 'qrcode-generator'
-import { CalendarClock, Plus, X } from 'lucide-react'
+import { ArrowLeft, CalendarClock, History, Plus, X } from 'lucide-react'
+import { useState } from 'react'
 import { api, pagina } from '../api'
 import { DetallePermiso, FormularioPermiso } from '../permisos'
+import { masNuevoPrimero, permisoVigente, permisosPrincipales, reservasPrincipales } from '../historial'
 import { Bloque, Boton, Cargando, Cifras, ConDialogo, Estado, Formulario, Franja, Pagina, Tabla, Vacio, VerFoto, nombre, useAccion, useDatos } from '../ui'
 import { decimal, fecha, fechaHora, hoy, instante } from '../formatos'
 
@@ -12,7 +14,9 @@ function CodigoQr({ contenido }) {
   return <div className="qr" role="img" aria-label="Mi código QR" dangerouslySetInnerHTML={{ __html: qr.createSvgTag({ scalable: true, margin: 2 }) }} />
 }
 
-const VIGENTES = ['PENDIENTE_APODERADO', 'PENDIENTE_PRECEPTOR', 'APROBADO']
+const BotonHistorial = ({ abierto, onCambio }) => (
+  <Boton variante="secundario" icono={abierto ? ArrowLeft : History} onClick={() => onCambio(!abierto)}>{abierto ? 'Volver' : 'Historial'}</Boton>
+)
 
 const PedirPermiso = ({ alTerminar }) => (
   <ConDialogo texto="Pedir permiso" variante="principal" icono={Plus}>
@@ -21,9 +25,8 @@ const PedirPermiso = ({ alTerminar }) => (
 )
 
 export function Inicio() {
-  const permisos = useDatos(pagina('/permisos/solicitudes/mias', 20), { cada: 15000 })
-  // Un permiso aprobado cuyo retorno ya pasó deja de ser «vigente».
-  const vigentes = permisos.datos?.contenido.filter((p) => VIGENTES.includes(p.estado) && new Date(p.retornoAutorizado) > new Date()) ?? []
+  const permisos = useDatos(pagina('/permisos/solicitudes/mias'), { cada: 15000 })
+  const vigentes = permisos.datos?.contenido.filter((p) => permisoVigente(p)) ?? []
   const yo = useDatos('/residentes/yo')
   const hab = useDatos('/residentes/yo/habilitacion', { cada: 30000 })
   const mes = useDatos('/residentes/yo/resumen-mensual')
@@ -69,15 +72,20 @@ export function Inicio() {
 }
 
 export function Permisos() {
-  const lista = useDatos(pagina('/permisos/solicitudes/mias'), { cada: 10000 })
+  const lista = useDatos('/permisos/solicitudes/mias', { cada: 10000, traer: api.todas })
+  const [historial, setHistorial] = useState(false)
   const [ejecutar] = useAccion()
   return (
     <Pagina
-      titulo="Permisos"
-      acciones={<PedirPermiso alTerminar={lista.recargar} />}
+      titulo={historial ? 'Historial de permisos' : 'Permisos'}
+      sub={historial ? 'Todos tus permisos, lo más nuevo primero' : 'Vigentes y de las últimas 72 horas'}
+      acciones={<><BotonHistorial abierto={historial} onCambio={setHistorial} /><PedirPermiso alTerminar={lista.recargar} /></>}
     >
       <Cargando datos={lista} vacio="Aún no has pedido permisos. Cuando necesites salir, envía el primero." accion={<PedirPermiso alTerminar={lista.recargar} />}>
-        {(permisos) => permisos.map((p) => (
+        {(todos) => {
+          const visibles = historial ? masNuevoPrimero(todos, 'creadoEn') : permisosPrincipales(todos)
+          if (visibles.length === 0) return <Vacio accion={<BotonHistorial abierto={false} onCambio={setHistorial} />}>No hay permisos recientes. Los anteriores están en Historial.</Vacio>
+          return visibles.map((p) => (
           <DetallePermiso key={p.id} p={p} acciones={['PENDIENTE_APODERADO', 'PENDIENTE_PRECEPTOR', 'APROBADO'].includes(p.estado) && (
             <>
               {p.estado !== 'APROBADO' || !p.garitaSalida ? (
@@ -98,7 +106,8 @@ export function Permisos() {
               )}
             </>
           )} />
-        ))}
+          ))
+        }}
       </Cargando>
     </Pagina>
   )
@@ -150,11 +159,30 @@ export function Limpieza() {
 
 export function Reservas() {
   const oferta = useDatos('/reservas/oferta', { cada: 15000 })
-  const mias = useDatos(pagina('/reservas/mias', 30), { cada: 15000 })
+  const mias = useDatos('/reservas/mias', { cada: 15000, traer: api.todas })
+  const [historial, setHistorial] = useState(false)
   const [ejecutar] = useAccion()
   const recargar = () => { oferta.recargar(); mias.recargar() }
   const cancelar = (id) => window.confirm('¿Cancelar la reserva?') && ejecutar(() => api.post(`/reservas/${id}/cancelar`), 'Reserva cancelada', recargar)
 
+  const misReservas = (
+    <Cargando datos={mias} vacio="No tienes reservas. Elige una comida en «Disponible».">
+      {(todas) => {
+        const visibles = historial ? masNuevoPrimero(todas, 'creadaEn') : reservasPrincipales(todas, hoy())
+        if (visibles.length === 0) return <Vacio>No hay reservas recientes. Las anteriores están en Historial.</Vacio>
+        return <Tabla filas={visibles} columnas={[
+          ['Fecha', (r) => fecha(r.fecha)], ['Comida', (r) => nombre(r.tipo)], ['Estado', (r) => <Estado valor={r.estado} />],
+          ['Pedida', (r) => fechaHora(r.creadaEn)], ['Nota', (r) => r.motivoCancelacion || r.motivo || '—'],
+          ['', (r) => <><VerFoto id={r.evidenciaId} />{r.fecha >= hoy() && ['PENDIENTE', 'RESERVADA'].includes(r.estado) && <Boton variante="enlace" onClick={() => cancelar(r.id)}>Cancelar</Boton>}</>],
+        ]} />
+      }}
+    </Cargando>
+  )
+  const botonHistorial = <BotonHistorial abierto={historial} onCambio={setHistorial} />
+
+  if (historial) {
+    return <Pagina titulo="Historial de reservas" sub="Todas tus reservas, lo más nuevo primero" acciones={botonHistorial}>{misReservas}</Pagina>
+  }
   return (
     <Pagina titulo="Reservas de comida">
       <Bloque titulo="Disponible">
@@ -192,14 +220,9 @@ export function Reservas() {
           ))}
         </Cargando>
       </Bloque>
-      <Bloque titulo="Mis reservas">
-        <Cargando datos={mias} vacio="No tienes reservas. Elige una comida en «Disponible».">
-          {(l) => <Tabla filas={l} columnas={[
-            ['Fecha', (r) => fecha(r.fecha)], ['Comida', (r) => nombre(r.tipo)], ['Estado', (r) => <Estado valor={r.estado} />],
-            ['Nota', (r) => r.motivoCancelacion || r.motivo || '—'],
-            ['', (r) => <><VerFoto id={r.evidenciaId} />{r.fecha >= hoy() && ['PENDIENTE', 'RESERVADA'].includes(r.estado) && <Boton variante="enlace" onClick={() => cancelar(r.id)}>Cancelar</Boton>}</>],
-          ]} />}
-        </Cargando>
+      <Bloque titulo="Mis reservas" acciones={botonHistorial}>
+        <p className="tenue">De hoy en adelante y las pedidas en las últimas 72 horas.</p>
+        {misReservas}
       </Bloque>
     </Pagina>
   )

@@ -5,7 +5,7 @@ import { api } from './api'
 /* ---------- datos ---------- */
 
 /** Carga `ruta` y, si se indica, la vuelve a pedir cada `cada` ms (los estados cambian desde otros roles). */
-export function useDatos(ruta, { cada } = {}) {
+export function useDatos(ruta, { cada, traer = api.get } = {}) {
   const [estado, setEstado] = useState({ datos: null, error: null, cargando: true })
   const vigente = useRef(ruta)
   vigente.current = ruta
@@ -13,12 +13,12 @@ export function useDatos(ruta, { cada } = {}) {
   const recargar = useCallback(async () => {
     if (!ruta) return setEstado({ datos: null, error: null, cargando: false })
     try {
-      const datos = await api.get(ruta)
+      const datos = await traer(ruta)
       if (vigente.current === ruta) setEstado({ datos, error: null, cargando: false })
     } catch (error) {
       if (vigente.current === ruta) setEstado((e) => ({ ...e, error, cargando: false }))
     }
-  }, [ruta])
+  }, [ruta, traer])
 
   useEffect(() => {
     setEstado({ datos: null, error: null, cargando: true })
