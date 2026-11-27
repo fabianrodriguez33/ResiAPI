@@ -64,14 +64,14 @@ public abstract class PruebaIntegracion {
 
     /**
      * Lunes aleatorio lejano. La base de pruebas conserva las sesiones de culto de ejecuciones anteriores y la habilitación
-     * semanal mira la semana previa, así que se elige un lunes cuya semana anterior no tenga cultos registrados. Tampoco
+     * semanal mira la semana previa, así que se elige un lunes sin cultos registrados ni en esa semana ni en la anterior. Tampoco
      * sirve una semana en la que otra prueba cerró reservas o el comedor.
      */
     protected java.time.LocalDate lunesAleatorio() {
         var azar = new java.util.Random();
         for (int intento = 0; intento < 200; intento++) {
             var lunes = java.time.LocalDate.of(2031, 1, 6).plusWeeks(azar.nextInt(3000));
-            if (sesionesCulto.fechasConSesion(lunes.minusDays(9), lunes.minusDays(1)).isEmpty() && comedorSinCierres(lunes)) {
+            if (sesionesCulto.fechasConSesion(lunes.minusDays(9), lunes.plusDays(6)).isEmpty() && comedorSinCierres(lunes)) {
                 return lunes;
             }
         }
