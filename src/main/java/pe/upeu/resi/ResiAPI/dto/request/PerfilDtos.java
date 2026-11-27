@@ -14,7 +14,7 @@ public final class PerfilDtos {
     }
 
     public record ContactoRequest(
-            @jakarta.validation.constraints.Pattern(regexp = "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Email(message = "Correo inválido") @Size(max = 150) String email,
+            @jakarta.validation.constraints.Pattern(regexp = "^$|^[^@\\s]+@(?:[^@\\s.]+\\.)+[^@\\s.]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Email(message = "Correo inválido") @Size(max = 150) String email,
             @jakarta.validation.constraints.Pattern(regexp = "^(9\\d{8})?$", message = "El celular debe tener 9 dígitos y empezar en 9") @Size(max = 20) String telefono,
             @Past(message = "La fecha de nacimiento debe ser anterior a hoy") LocalDate fechaNacimiento) {
     }

@@ -33,7 +33,7 @@ public final class ResidenteDtos {
             @Pattern(regexp = "^(\\d{8})?$", message = "El DNI tiene 8 dígitos") String dni,
             @jakarta.validation.constraints.Past(message = "La fecha de nacimiento debe ser anterior a hoy") java.time.LocalDate fechaNacimiento,
             @NotBlank(message = "El celular es obligatorio") @jakarta.validation.constraints.Pattern(regexp = "^9\\d{8}$", message = "El celular debe tener 9 dígitos y empezar en 9") String telefono,
-            @NotBlank(message = "El correo es obligatorio") @jakarta.validation.constraints.Pattern(regexp = "^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Size(max = 150) String email,
+            @NotBlank(message = "El correo es obligatorio") @jakarta.validation.constraints.Pattern(regexp = "^[^@\\s]+@(?:[^@\\s.]+\\.)+[^@\\s.]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Size(max = 150) String email,
             @Size(max = 100, message = "Máximo 100 caracteres") String carrera,
             @Min(value = 1, message = "El ciclo va de 1 a 14") @Max(value = 14, message = "El ciclo va de 1 a 14") Integer ciclo) {
     }
@@ -43,7 +43,7 @@ public final class ResidenteDtos {
      * El código universitario y el DNI los cambia solo la administración.
      */
     public record PerfilRequest(
-            @jakarta.validation.constraints.Pattern(regexp = "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Email(message = "Correo inválido") @Size(max = 150) String email,
+            @jakarta.validation.constraints.Pattern(regexp = "^$|^[^@\\s]+@(?:[^@\\s.]+\\.)+[^@\\s.]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Email(message = "Correo inválido") @Size(max = 150) String email,
             @jakarta.validation.constraints.Pattern(regexp = "^(9\\d{8})?$", message = "El celular debe tener 9 dígitos y empezar en 9") @Size(max = 20) String telefono,
             @jakarta.validation.constraints.Past(message = "La fecha de nacimiento debe ser anterior a hoy") java.time.LocalDate fechaNacimiento,
             @Size(max = 100, message = "Máximo 100 caracteres") String carrera,
@@ -63,7 +63,7 @@ public final class ResidenteDtos {
     public record ApoderadoRequest(
             @NotBlank(message = "El nombre es obligatorio") @Size(max = 150) String nombre,
             @jakarta.validation.constraints.Pattern(regexp = "^(9\\d{8})?$", message = "El celular debe tener 9 dígitos y empezar en 9") @Size(max = 20) String telefono,
-            @jakarta.validation.constraints.Pattern(regexp = "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Email(message = "Correo inválido") @Size(max = 150) String email,
+            @jakarta.validation.constraints.Pattern(regexp = "^$|^[^@\\s]+@(?:[^@\\s.]+\\.)+[^@\\s.]{2,}$", message = "Escribe un correo válido, por ejemplo nombre@upeu.edu.pe") @Email(message = "Correo inválido") @Size(max = 150) String email,
             @Size(max = 50) String parentesco,
             boolean principal,
             /** Opcional: crea (o reutiliza, si ya existe) la cuenta del apoderado para que use la app. */
