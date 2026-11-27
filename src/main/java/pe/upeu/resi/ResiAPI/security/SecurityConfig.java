@@ -79,6 +79,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/olvide-clave").permitAll()
                         .requestMatchers("/api/v1/publico/**", "/publico/**", "/panel", "/panel/**").permitAll()
+                        // Archivos de la web (React). Solo son estáticos: los datos siguen pidiendo token y rol.
+                        .requestMatchers(HttpMethod.GET, "/", "/app", "/app/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint(noAutenticado).accessDeniedHandler(sinPermiso))
                 .oauth2ResourceServer(o -> o
