@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
+import { DoorClosed, DoorOpen, Search, ShieldCheck } from 'lucide-react'
 import { api, pagina } from '../api'
-import { Bloque, Boton, Cargando, LectorQr, Pagina, Tabla, nombre, useAccion, useDatos } from '../ui'
+import { Bloque, Boton, Cargando, Estado, Franja, LectorQr, Pagina, Tabla, nombre, useAccion, useDatos } from '../ui'
 import { DetallePermiso } from '../permisos'
 import { fechaHora } from '../formatos'
 
@@ -35,7 +36,7 @@ export function Verificar() {
       <Bloque>
         <form className="fila" onSubmit={(e) => { e.preventDefault(); buscar(codigo) }}>
           <input aria-label="Código del residente" placeholder="Código o QR del residente" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-          <button type="submit" className="boton boton-principal" disabled={ocupado}>Buscar</button>
+          <button type="submit" className="boton boton-principal" disabled={ocupado}><Search size={17} />Buscar</button>
         </form>
         <LectorQr onCodigo={buscar} />
       </Bloque>
@@ -45,18 +46,22 @@ export function Verificar() {
           {consulta.mensaje && <p>{consulta.mensaje}</p>}
           {consulta.permisos?.map((p) => (
             <article className="item" key={p.id}>
-              <header><strong>{p.destino}</strong>{p.salidaAbierta && <span className="estado estado-espera">Está fuera</span>}</header>
+              <header><strong>{p.destino}</strong>{p.salidaAbierta && <Estado valor="PENDIENTE" texto="Está fuera" />}</header>
               <p>{nombre(p.tipo)} · {fechaHora(p.salida)} → {fechaHora(p.retorno)}</p>
               <p className="tenue">{p.motivo}</p>
-              <div className="acciones"><Boton variante="secundario" onClick={() => verificar(p.id)}>Verificar este permiso</Boton></div>
+              <div className="acciones"><Boton variante="secundario" icono={ShieldCheck} onClick={() => verificar(p.id)}>Verificar este permiso</Boton></div>
             </article>
           ))}
           {v && (
-            <div className={`franja ${v.movimientoPermitido ? 'franja-bien' : 'franja-mal'}`}>
+            <Franja tono={v.movimientoPermitido ? 'bien' : 'mal'}>
               <strong>{nombre(v.resultado)}</strong>
               <p>{v.mensaje}</p>
-              {v.movimientoPermitido && <Boton disabled={ocupado} onClick={registrar}>Registrar {v.movimientoPermitido === 'SALIDA' ? 'salida' : 'retorno'}</Boton>}
-            </div>
+              {v.movimientoPermitido && (
+                <Boton icono={v.movimientoPermitido === 'SALIDA' ? DoorOpen : DoorClosed} disabled={ocupado} onClick={registrar}>
+                  Registrar {v.movimientoPermitido === 'SALIDA' ? 'salida' : 'retorno'}
+                </Boton>
+              )}
+            </Franja>
           )}
         </Bloque>
       )}
@@ -68,7 +73,7 @@ export function Aprobados() {
   const lista = useDatos(pagina('/garita/permisos'), { cada: 10000 })
   return (
     <Pagina titulo="Permisos aprobados">
-      <Cargando datos={lista} vacio="No hay permisos aprobados.">
+      <Cargando datos={lista} vacio="No hay permisos aprobados por ahora." accion={<a href="#/verificar">Verificar un residente</a>}>
         {(l) => l.map((p) => <DetallePermiso key={p.id} p={p} conNombre />)}
       </Cargando>
     </Pagina>
@@ -79,7 +84,7 @@ export function Historial() {
   const lista = useDatos(pagina('/garita/movimientos'), { cada: 10000 })
   return (
     <Pagina titulo="Historial de garita">
-      <Cargando datos={lista} vacio="Sin movimientos.">
+      <Cargando datos={lista} vacio="Aún no se registran movimientos." accion={<a href="#/verificar">Verificar un residente</a>}>
         {(l) => <Tabla filas={l} columnas={[
           ['Hora', (m) => fechaHora(m.registradoEn)], ['Residente', (m) => m.nombreCompleto], ['Código', (m) => m.codigo],
           ['Movimiento', (m) => nombre(m.tipo)], ['Tardanza', (m) => (m.minutosTarde ? `${m.minutosTarde} min` : '—')],

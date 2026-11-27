@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { CircleCheck, CircleX, Clock, Camera, CameraOff, Image, Inbox, Minus, RotateCw, Send, TriangleAlert, X } from 'lucide-react'
 import { api } from './api'
 
 /* ---------- datos ---------- */
@@ -47,7 +48,11 @@ export function ProveedorAvisos({ children }) {
     <Avisos.Provider value={mostrar}>
       {children}
       <div className="avisos" role="status" aria-live="polite">
-        {aviso && <div className={`aviso aviso-${aviso.tipo}`}>{aviso.texto}</div>}
+        {aviso && (
+          <div className={`aviso aviso-${aviso.tipo}`}>
+            {aviso.tipo === 'error' ? <TriangleAlert size={18} /> : <CircleCheck size={18} />}{aviso.texto}
+          </div>
+        )}
       </div>
     </Avisos.Provider>
   )
@@ -91,8 +96,24 @@ export function Pagina({ titulo, sub, acciones, children }) {
   )
 }
 
-export function Boton({ variante = 'principal', children, ...resto }) {
-  return <button type="button" className={`boton boton-${variante}`} {...resto}>{children}</button>
+export function Boton({ variante = 'principal', icono: Icono, children, ...resto }) {
+  return <button type="button" className={`boton boton-${variante}`} {...resto}>{Icono && <Icono size={17} />}{children}</button>
+}
+
+/** Estado vacío: qué pasa y, si corresponde, qué hacer. */
+export function Vacio({ children, accion }) {
+  return (
+    <div className="vacio vacio-bloque">
+      <Inbox size={22} />
+      <p>{children}</p>
+      {accion}
+    </div>
+  )
+}
+
+export function Franja({ tono, children }) {
+  const Icono = { bien: CircleCheck, mal: CircleX, espera: Clock }[tono]
+  return <div className={`franja franja-${tono}`}><Icono size={20} /><div>{children}</div></div>
 }
 
 export function Bloque({ titulo, acciones, children }) {
@@ -109,18 +130,18 @@ export function Bloque({ titulo, acciones, children }) {
   )
 }
 
-export function Cargando({ datos, children, vacio = 'Todavía no hay nada aquí.' }) {
+export function Cargando({ datos, children, vacio = 'Todavía no hay nada aquí.', accion }) {
   if (datos.cargando) return <p className="vacio">Cargando…</p>
   if (datos.error && !datos.datos) {
     return (
       <p className="vacio error">
-        {datos.error.message} <Boton variante="enlace" onClick={datos.recargar}>Reintentar</Boton>
+        {datos.error.message} <Boton variante="enlace" icono={RotateCw} onClick={datos.recargar}>Reintentar</Boton>
       </p>
     )
   }
   // Solo las respuestas paginadas traen la lista en `contenido` (el QR también tiene un campo con ese nombre).
   const lista = Array.isArray(datos.datos?.contenido) ? datos.datos.contenido : datos.datos
-  if (Array.isArray(lista) && lista.length === 0) return <p className="vacio">{vacio}</p>
+  if (Array.isArray(lista) && lista.length === 0) return <Vacio accion={accion}>{vacio}</Vacio>
   if (datos.datos == null) return null
   return children(lista)
 }
@@ -169,7 +190,12 @@ const NOMBRES = {
   PERNOCTE: 'Pernoctar fuera', PRECEPTOR: 'Pastor o monitor',
 }
 export const nombre = (v) => NOMBRES[v] ?? (v ? v.charAt(0) + v.slice(1).toLowerCase().replaceAll('_', ' ') : '—')
-export const Estado = ({ valor }) => <span className={`estado estado-${TONOS[valor] ?? 'neutro'}`}>{nombre(valor)}</span>
+const ICONOS = { bien: CircleCheck, mal: CircleX, espera: Clock, neutro: Minus }
+export function Estado({ valor, texto }) {
+  const tono = TONOS[valor] ?? 'neutro'
+  const Icono = ICONOS[tono]
+  return <span className={`estado estado-${tono}`}><Icono size={14} />{texto ?? nombre(valor)}</span>
+}
 
 export function Pestanas({ opciones, valor, onCambio }) {
   return (
@@ -188,7 +214,7 @@ export function Dialogo({ titulo, onCerrar, children }) {
     <dialog ref={ref} onClose={onCerrar}>
       <div className="bloque-cabecera">
         <h2>{titulo}</h2>
-        <Boton variante="enlace" onClick={onCerrar}>Cerrar</Boton>
+        <Boton variante="enlace" icono={X} onClick={onCerrar}>Cerrar</Boton>
       </div>
       {children}
     </dialog>
@@ -199,7 +225,7 @@ export function Dialogo({ titulo, onCerrar, children }) {
  * Formulario a partir de una lista de campos: [{ n, t, tipo, opciones, requerido, ayuda, si }].
  * Muestra los errores por campo que devuelve el servidor.
  */
-export function Formulario({ campos, inicial = {}, enviar, boton = 'Guardar', exito, alTerminar }) {
+export function Formulario({ campos, inicial = {}, enviar, boton = 'Guardar', icono: Icono = Send, exito, alTerminar }) {
   const [valores, setValores] = useState(() =>
     Object.fromEntries(campos.map((c) => [c.n, inicial[c.n] ?? (c.tipo === 'check' ? false : '')])))
   const [errores, setErrores] = useState({})
@@ -253,27 +279,27 @@ export function Formulario({ campos, inicial = {}, enviar, boton = 'Guardar', ex
           </label>
         )
       })}
-      {general && <p className="error" role="alert">{general}</p>}
-      <button type="submit" className="boton boton-principal" disabled={ocupado}>{ocupado ? 'Enviando…' : boton}</button>
+      {general && <p className="error con-icono" role="alert"><TriangleAlert size={18} />{general}</p>}
+      <button type="submit" className="boton boton-principal" disabled={ocupado}><Icono size={17} />{ocupado ? 'Enviando…' : boton}</button>
     </form>
   )
 }
 
 /** Botón que abre un diálogo; `children` recibe la función para cerrarlo. */
-export function ConDialogo({ texto, titulo, variante = 'secundario', children }) {
+export function ConDialogo({ texto, titulo, variante = 'secundario', icono, children }) {
   const [abierto, setAbierto] = useState(false)
   return (
     <>
-      <Boton variante={variante} onClick={() => setAbierto(true)}>{texto}</Boton>
+      <Boton variante={variante} icono={icono} onClick={() => setAbierto(true)}>{texto}</Boton>
       {abierto && <Dialogo titulo={titulo ?? texto} onCerrar={() => setAbierto(false)}>{children(() => setAbierto(false))}</Dialogo>}
     </>
   )
 }
 
 /** Acción que exige escribir el motivo (anular, eliminar, justificar). */
-export function ConMotivo({ texto, titulo, enviar, alTerminar, variante = 'peligro', etiqueta = 'Motivo' }) {
+export function ConMotivo({ texto, titulo, enviar, alTerminar, variante = 'peligro', etiqueta = 'Motivo', icono = CircleX }) {
   return (
-    <ConDialogo texto={texto} titulo={titulo} variante={variante}>
+    <ConDialogo texto={texto} titulo={titulo} variante={variante} icono={icono}>
       {(cerrar) => (
         <Formulario
           campos={[{ n: 'motivo', t: etiqueta, tipo: 'area', requerido: true }]}
@@ -299,7 +325,7 @@ export function Foto({ id }) {
 }
 
 export const VerFoto = ({ id }) =>
-  id ? <ConDialogo texto="Ver foto" titulo="Evidencia" variante="enlace">{() => <Foto id={id} />}</ConDialogo> : null
+  id ? <ConDialogo texto="Ver foto" titulo="Evidencia" variante="enlace" icono={Image}>{() => <Foto id={id} />}</ConDialogo> : null
 
 /** Lector de QR con la cámara cuando el navegador lo permite (Chrome en Android y macOS). */
 export function LectorQr({ onCodigo }) {
@@ -337,7 +363,7 @@ export function LectorQr({ onCodigo }) {
   }
   return (
     <div>
-      <Boton variante="secundario" onClick={() => { setFallo(null); setActivo(!activo) }}>
+      <Boton variante="secundario" icono={activo ? CameraOff : Camera} onClick={() => { setFallo(null); setActivo(!activo) }}>
         {activo ? 'Apagar cámara' : 'Escanear con la cámara'}
       </Boton>
       {fallo && <p className="error">{fallo}</p>}

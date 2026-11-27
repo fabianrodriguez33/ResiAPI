@@ -1,5 +1,9 @@
 import { Component, StrictMode, useEffect, useState, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
+import {
+  BedDouble, Bell, BookOpen, CalendarCheck, CircleCheck, CircleUser, ClipboardList, FileSpreadsheet, History, House, LogOut, ScanLine, ScrollText,
+  Settings, Sparkles, Ticket, UserCog, UserX, Users, UtensilsCrossed,
+} from 'lucide-react'
 import { guardarSesion, leerSesion } from './api'
 import { Boton, ProveedorAvisos, nombre, useDatos } from './ui'
 import { Avisos, CambiarClave, Login, Perfil } from './pages/comun'
@@ -11,21 +15,22 @@ import * as admin from './pages/admin'
 import logo from './assets/logo.png'
 import './styles.css'
 
-// Menú de cada rol: [ruta, título, componente]. El servidor vuelve a validar el rol en cada petición.
+// Menú de cada rol: [ruta, título, componente, icono]. El servidor vuelve a validar el rol en cada petición.
 const MENUS = {
   RESIDENTE: [
-    ['inicio', 'Inicio', residente.Inicio], ['permisos', 'Permisos', residente.Permisos], ['asistencias', 'Asistencias', residente.Asistencias],
-    ['limpieza', 'Limpieza', residente.Limpieza], ['reservas', 'Reservas', residente.Reservas],
+    ['inicio', 'Inicio', residente.Inicio, House], ['permisos', 'Permisos', residente.Permisos, Ticket], ['asistencias', 'Asistencias', residente.Asistencias, CalendarCheck],
+    ['limpieza', 'Limpieza', residente.Limpieza, Sparkles], ['reservas', 'Reservas', residente.Reservas, UtensilsCrossed],
   ],
-  APODERADO: [['permisos', 'Permisos', apoderado.Permisos], ['hijos', 'Mis hijos', apoderado.Hijos]],
+  APODERADO: [['permisos', 'Permisos', apoderado.Permisos, Ticket], ['hijos', 'Mis hijos', apoderado.Hijos, Users]],
   PRECEPTOR: [
-    ['permisos', 'Permisos', pastor.Permisos], ['cultos', 'Cultos', pastor.Cultos], ['limpieza', 'Limpieza', pastor.Limpieza],
-    ['reservas', 'Reservas', pastor.Reservas], ['faltas', 'Faltas', pastor.Faltas], ['reporte', 'Reporte', pastor.Reporte],
+    ['inicio', 'Inicio', pastor.Inicio, House], ['permisos', 'Permisos', pastor.Permisos, Ticket], ['cultos', 'Cultos', pastor.Cultos, BookOpen],
+    ['limpieza', 'Limpieza', pastor.Limpieza, Sparkles], ['reservas', 'Reservas', pastor.Reservas, UtensilsCrossed], ['faltas', 'Faltas', pastor.Faltas, UserX],
+    ['reporte', 'Reporte', pastor.Reporte, FileSpreadsheet],
   ],
-  GARITA: [['verificar', 'Verificar', garita.Verificar], ['aprobados', 'Aprobados', garita.Aprobados], ['historial', 'Historial', garita.Historial]],
+  GARITA: [['verificar', 'Verificar', garita.Verificar, ScanLine], ['aprobados', 'Aprobados', garita.Aprobados, CircleCheck], ['historial', 'Historial', garita.Historial, History]],
   ADMINISTRADOR: [
-    ['residentes', 'Residentes', admin.Residentes], ['habitaciones', 'Habitaciones', admin.Habitaciones], ['usuarios', 'Usuarios', admin.Usuarios],
-    ['ajustes', 'Semestre y reglas', admin.Ajustes], ['auditoria', 'Auditoría', admin.Auditoria],
+    ['residentes', 'Residentes', admin.Residentes, Users], ['habitaciones', 'Habitaciones', admin.Habitaciones, BedDouble], ['usuarios', 'Usuarios', admin.Usuarios, UserCog],
+    ['ajustes', 'Semestre y reglas', admin.Ajustes, Settings], ['auditoria', 'Auditoría', admin.Auditoria, ScrollText],
   ],
 }
 
@@ -46,10 +51,10 @@ class Resguardo extends Component {
 }
 
 function Panel({ sesion, salir }) {
-  const ruta = useRuta()
+  const [ruta, apartado] = useRuta().split('/')
   const noLeidas = useDatos('/notificaciones/no-leidas', { cada: 20000 })
   const rol = sesion.roles[0]
-  const menu = [...(MENUS[rol] ?? []), ['avisos', 'Avisos', Avisos], ['cuenta', 'Mi cuenta', Perfil]]
+  const menu = [...(MENUS[rol] ?? []), ['avisos', 'Avisos', Avisos, Bell], ['cuenta', 'Mi cuenta', Perfil, CircleUser]]
   const actual = menu.find(([r]) => r === ruta) ?? menu[0]
   const Vista = actual[2]
   const cantidad = noLeidas.datos?.cantidad
@@ -59,10 +64,11 @@ function Panel({ sesion, salir }) {
       <nav className="lateral" aria-label="Principal">
         <div className="marca"><img src={logo} alt="" /><span>ResiUP</span></div>
         <ul>
-          {menu.map(([r, titulo]) => (
+          {menu.map(([r, titulo, , Icono]) => (
             <li key={r}>
               <a href={`#/${r}`} aria-current={r === actual[0] ? 'page' : undefined}>
-                {titulo}
+                <Icono size={19} />
+                <span>{titulo}</span>
                 {r === 'avisos' && cantidad > 0 && <span className="contador">{cantidad}</span>}
               </a>
             </li>
@@ -71,11 +77,11 @@ function Panel({ sesion, salir }) {
         <div className="quien">
           <strong>{sesion.nombreCompleto}</strong>
           <span>{nombre(rol)}</span>
-          <Boton variante="enlace" onClick={salir}>Cerrar sesión</Boton>
+          <Boton variante="enlace" icono={LogOut} onClick={salir}>Cerrar sesión</Boton>
         </div>
       </nav>
       <main className="contenido">
-        <Resguardo key={actual[0]}><Vista alLeer={noLeidas.recargar} /></Resguardo>
+        <Resguardo key={`${actual[0]}/${apartado}`}><Vista alLeer={noLeidas.recargar} apartado={apartado} /></Resguardo>
       </main>
     </div>
   )
@@ -101,7 +107,7 @@ function App() {
         <h1>Elige una clave nueva</h1>
         <p>Entraste con una clave provisional.</p>
         <CambiarClave alTerminar={() => poner({ ...sesion, debeCambiarClave: false })} />
-        <Boton variante="enlace" onClick={salir}>Salir</Boton>
+        <Boton variante="enlace" icono={LogOut} onClick={salir}>Salir</Boton>
       </main>
     )
   }
